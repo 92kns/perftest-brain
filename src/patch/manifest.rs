@@ -16,8 +16,6 @@ pub enum FixKind {
     RequestLongerTimeout { multiplier: u32 },
     /// Add a `skip-if` condition to the test entry.
     SkipIf { condition: String, comment: String },
-    /// Add a `disabled` annotation.
-    Disable { reason: String },
 }
 
 impl ManifestFix {
@@ -84,7 +82,6 @@ fn patch_content(original: &str, fix: &ManifestFix) -> Result<String> {
             insert_or_replace_directive(original, "requestLongerTimeout", &multiplier.to_string())
         }
         FixKind::SkipIf { condition, comment } => insert_skip_if(original, condition, comment),
-        FixKind::Disable { reason } => insert_or_replace_directive(original, "disabled", reason),
     }
 }
 

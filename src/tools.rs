@@ -24,6 +24,7 @@ pub enum ToolError {
         exit_code: i32,
         stderr: String,
     },
+    #[allow(dead_code)] // constructed when subprocess timeout enforcement is added
     #[error("tool {0} timed out after {1}s")]
     Timeout(String, u64),
 }

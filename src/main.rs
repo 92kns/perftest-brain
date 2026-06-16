@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -16,7 +15,6 @@ mod types;
 use types::InputSpec;
 
 const AGENTS_MD: &str = include_str!("../AGENTS.md");
-const NOT_IMPLEMENTED: &str = "Not yet implemented — coming in a future phase";
 
 #[derive(Parser)]
 #[command(
@@ -317,10 +315,20 @@ fn cmd_doctor(
 }
 
 fn cmd_update(checkout: &checkout::CheckoutRoot, json: bool, verbose: u8) -> anyhow::Result<()> {
-    eprintln!(
-        "Indexing Firefox checkout at {}...",
-        checkout.path.display()
-    );
+    if verbose > 0 {
+        if let Ok(prev) = index::index_stats() {
+            if let Some(ts) = prev.last_updated {
+                eprintln!("Previous index: {} tests, {} tasks (updated {}s ago)",
+                    prev.test_count, prev.task_count,
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs()
+                        .saturating_sub(ts));
+            }
+        }
+    }
+    eprintln!("Indexing Firefox checkout at {}...", checkout.path.display());
     let stats = index::update_index(&checkout.path, verbose > 0)?;
     if json {
         println!("{}", serde_json::to_string_pretty(&stats)?);
@@ -421,11 +429,24 @@ fn cmd_info(raw_input: Option<&str>, json: bool) -> anyhow::Result<()> {
         }
         InputSpec::Bug { bug_id } => {
             let bug = api::bugzilla::fetch_bug(*bug_id)?;
+            let alerts = api::perfherder::fetch_alert_summaries_for_bug(*bug_id)
+                .unwrap_or_default();
             if json {
-                println!("{}", serde_json::to_string_pretty(&bug)?);
+                #[derive(serde::Serialize)]
+                struct BugInfo<'a> {
+                    bug: &'a api::bugzilla::Bug,
+                    alert_count: usize,
+                }
+                println!("{}", serde_json::to_string_pretty(&BugInfo { bug: &bug, alert_count: alerts.len() })?);
             } else {
                 println!("Bug {}: {}", bug.id, bug.summary);
                 println!("Status: {} {}", bug.status, bug.resolution);
+                if !alerts.is_empty() {
+                    println!("Linked alerts: {}", alerts.len());
+                    for a in alerts.iter().take(5) {
+                        println!("  Alert {}: {} ({})", a.id, a.status, a.framework);
+                    }
+                }
             }
         }
         InputSpec::Push { push } => {

@@ -71,23 +71,6 @@ pub enum Confidence {
     Insufficient,
 }
 
-/// Outcome of trying to fetch enough run history.
-pub enum RunHistoryResult {
-    Sufficient(Vec<JobRun>),
-    /// Not enough runs — user must retrigger N more times.
-    NeedRetrigger {
-        have: usize,
-        need: usize,
-    },
-}
-
-/// One job run record.
-#[derive(Debug)]
-pub struct JobRun {
-    pub result: String,
-    pub job_type_name: String,
-    pub platform: String,
-}
 
 /// Diagnose a resolved input spec.
 ///
@@ -181,6 +164,23 @@ fn diagnose_alert(alert_id: u64, verbose: bool) -> Result<Diagnosis> {
         }
     }
 
+    // Surface profile URLs for regressions that have them
+    for r in summary.regressions.iter().filter(|r| r.has_profile) {
+        if let Some(url) = &r.profile_url {
+            // Attempt to list artifacts for the profile task to get a direct download URL
+            let task_hint = extract_task_id_from_url(url);
+            if let Some(task_id) = task_hint {
+                if let Ok(artifacts) = api::taskcluster::list_artifacts_for_task(&task_id) {
+                    for a in artifacts.iter().filter(|a| a.name.contains("profile")) {
+                        next_steps.push(format!("Profile: {}", a.url));
+                    }
+                }
+            } else {
+                next_steps.push(format!("Profile available: {}", url));
+            }
+        }
+    }
+
     if matches!(signal_type, SignalType::SustainedRegression) {
         next_steps.push(
             "This looks like a SUSTAINED REGRESSION (Perfherder t-test verdict). \
@@ -220,11 +220,22 @@ fn classify_signal_type(summary: &AlertSummary) -> SignalType {
 }
 
 fn find_pattern_matches(summary: &AlertSummary) -> Vec<Finding> {
-    // For now we don't have the raw log text from the API (that requires
-    // fetching Taskcluster job logs — Phase 3 stubs this, Phase 4+ fetches real logs).
-    // We match against the test/suite names as a proxy.
+    // Match against test/suite names as a proxy for log content.
+    // Enrich with local index entries when available.
+    let index_context: String = summary
+        .regressions
+        .iter()
+        .flat_map(|r| {
+            crate::index::searchfox::search_with_fallback(&r.test, false)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|e| e.name)
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
     let combined = format!(
-        "{} {} {}",
+        "{} {} {} {}",
         summary.framework,
         summary.repository,
         summary
@@ -232,7 +243,8 @@ fn find_pattern_matches(summary: &AlertSummary) -> Vec<Finding> {
             .iter()
             .map(|r| format!("{} {} {}", r.test, r.suite, r.platform))
             .collect::<Vec<_>>()
-            .join(" ")
+            .join(" "),
+        index_context,
     )
     .to_lowercase();
 
@@ -364,6 +376,18 @@ fn is_perf_job(name: &str) -> bool {
         || n.contains("awsy")
         || n.contains("talos")
         || n.contains("mozperftest")
+}
+
+/// Extract a Taskcluster task ID from a profile artifact URL.
+fn extract_task_id_from_url(url: &str) -> Option<String> {
+    // TC artifact URLs are: .../task/{task_id}/artifacts/...
+    let after_task = url.split("/task/").nth(1)?;
+    let task_id = after_task.split('/').next()?;
+    if task_id.len() > 10 {
+        Some(task_id.to_owned())
+    } else {
+        None
+    }
 }
 
 fn insufficient_diagnosis(message: String) -> Diagnosis {

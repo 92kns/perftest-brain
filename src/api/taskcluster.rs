@@ -34,6 +34,3 @@ pub fn list_artifacts_for_task(task_id: &str) -> Result<Vec<ArtifactRef>> {
     Ok(refs)
 }
 
-pub fn artifact_url(task_id: &str, artifact_name: &str) -> String {
-    format!("{TC_BASE}/task/{task_id}/artifacts/{artifact_name}")
-}

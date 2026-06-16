@@ -48,7 +48,7 @@ Given any intermittent failure signal (Treeherder job, test name/platform, Perfh
 ## Constraints
 
 - **Language**: Rust — single binary, same pattern as car-mechanic-cli
-- **Portability**: Firefox checkout path must be user-configurable; no hardcoded `~/` paths in the tool
+- **Checkout detection**: Engineers run the tool from within their Firefox checkout — tool auto-detects checkout root from CWD. CLI flag/env var available as override; no hardcoded paths.
 - **No home dir data**: Tool config/index lives in XDG config dir or alongside the project, not `~/.perftest-brain`
 - **API dependencies**: Treeherder, Perfherder, Taskcluster APIs (same as perf-alert-cli); stmo-cli and searchfox-cli as subprocess calls
 - **Patch scope**: Local file edits only — no Phabricator submission, no Try push (user handles that)

@@ -72,7 +72,6 @@ pub enum Confidence {
     Insufficient,
 }
 
-
 /// Diagnose a resolved input spec.
 ///
 /// Returns `Err` for genuine errors, and a `Diagnosis` with `confidence: Insufficient`
@@ -89,9 +88,14 @@ pub fn diagnose(spec: &InputSpec, verbose: bool) -> Result<Diagnosis> {
         }
         InputSpec::Bug { bug_id } => {
             let bug = api::bugzilla::fetch_bug(*bug_id)?;
-            let alerts = api::perfherder::fetch_alert_summaries_for_bug(*bug_id).unwrap_or_default();
+            let alerts =
+                api::perfherder::fetch_alert_summaries_for_bug(*bug_id).unwrap_or_default();
             if let Some(first) = alerts.first() {
-                diagnose_alert(first.id, Some(format!("Bug {}: {}", bug.id, bug.summary)), verbose)
+                diagnose_alert(
+                    first.id,
+                    Some(format!("Bug {}: {}", bug.id, bug.summary)),
+                    verbose,
+                )
             } else {
                 Ok(insufficient_diagnosis(format!(
                     "Bug {}: {} — no linked Perfherder alerts found. Pass an alert ID directly.",
@@ -105,12 +109,14 @@ pub fn diagnose(spec: &InputSpec, verbose: bool) -> Result<Diagnosis> {
             let input_summary = format!("PerfCompare base={} new={}", base.revision, new.revision);
             Ok(diagnose_from_log(&log_text, &input_summary))
         }
-        InputSpec::Lando { base_lando_id, new_lando_id, .. } => {
-            Ok(insufficient_diagnosis(format!(
-                "Lando compare base={} new={} — resolve to revision hashes first via perf-alert-cli",
-                base_lando_id, new_lando_id
-            )))
-        }
+        InputSpec::Lando {
+            base_lando_id,
+            new_lando_id,
+            ..
+        } => Ok(insufficient_diagnosis(format!(
+            "Lando compare base={} new={} — resolve to revision hashes first via perf-alert-cli",
+            base_lando_id, new_lando_id
+        ))),
     }
 }
 
@@ -142,11 +148,18 @@ pub fn diagnose_test_platform(test: &str, platform: &str, verbose: bool) -> Resu
     // Find the first alert that references our test name
     for id in alert_ids {
         if let Ok(summary) = api::perfherder::fetch_alert_summary(id) {
-            let matches_test = summary.regressions.iter().chain(summary.improvements.iter())
-                .any(|r| r.test.to_lowercase().contains(&test.to_lowercase())
-                    && r.platform.to_lowercase().contains(&platform.to_lowercase()));
+            let matches_test = summary
+                .regressions
+                .iter()
+                .chain(summary.improvements.iter())
+                .any(|r| {
+                    r.test.to_lowercase().contains(&test.to_lowercase())
+                        && r.platform.to_lowercase().contains(&platform.to_lowercase())
+                });
             if matches_test {
-                if verbose { eprintln!("Found matching alert: {}", id); }
+                if verbose {
+                    eprintln!("Found matching alert: {}", id);
+                }
                 return diagnose_alert(id, Some(format!("{} on {}", test, platform)), verbose);
             }
         }
@@ -159,7 +172,11 @@ pub fn diagnose_test_platform(test: &str, platform: &str, verbose: bool) -> Resu
     )))
 }
 
-fn diagnose_alert(alert_id: u64, summary_override: Option<String>, verbose: bool) -> Result<Diagnosis> {
+fn diagnose_alert(
+    alert_id: u64,
+    summary_override: Option<String>,
+    verbose: bool,
+) -> Result<Diagnosis> {
     if verbose {
         eprintln!("Fetching alert summary {}...", alert_id);
     }
@@ -167,13 +184,17 @@ fn diagnose_alert(alert_id: u64, summary_override: Option<String>, verbose: bool
     let summary = api::perfherder::fetch_alert_summary(alert_id)?;
     let signal_type = classify_signal_type(&summary);
 
-    let input_summary = summary_override.unwrap_or_else(|| format!(
-        "Alert {} — {} ({}) on {}",
-        summary.id, summary.status, summary.framework, summary.repository
-    ));
+    let input_summary = summary_override.unwrap_or_else(|| {
+        format!(
+            "Alert {} — {} ({}) on {}",
+            summary.id, summary.status, summary.framework, summary.repository
+        )
+    });
 
     // Try fetching actual failure logs via treeherder-cli for richer pattern matching
-    let log_text = summary.regressions.first()
+    let log_text = summary
+        .regressions
+        .first()
         .map(|r| logs::treeherder_url(&r.new_push.revision, &r.new_push.repo))
         .and_then(|url| logs::fetch_failure_logs(&url).ok());
 
@@ -332,16 +353,23 @@ fn find_pattern_matches_by_name(summary: &AlertSummary) -> Vec<Finding> {
         "{} {} {} {}",
         summary.framework,
         summary.repository,
-        summary.regressions.iter()
+        summary
+            .regressions
+            .iter()
             .map(|r| format!("{} {} {}", r.test, r.suite, r.platform))
             .collect::<Vec<_>>()
             .join(" "),
         index_context,
-    ).to_lowercase();
+    )
+    .to_lowercase();
 
     patterns::PATTERNS
         .iter()
-        .filter(|p| p.matches.iter().all(|m| combined.contains(&m.to_lowercase())))
+        .filter(|p| {
+            p.matches
+                .iter()
+                .all(|m| combined.contains(&m.to_lowercase()))
+        })
         .map(|p| Finding {
             category: p.category.into(),
             description: p.description.into(),

@@ -323,17 +323,23 @@ fn cmd_update(checkout: &checkout::CheckoutRoot, json: bool, verbose: u8) -> any
     if verbose > 0 {
         if let Ok(prev) = index::index_stats() {
             if let Some(ts) = prev.last_updated {
-                eprintln!("Previous index: {} tests, {} tasks (updated {}s ago)",
-                    prev.test_count, prev.task_count,
+                eprintln!(
+                    "Previous index: {} tests, {} tasks (updated {}s ago)",
+                    prev.test_count,
+                    prev.task_count,
                     std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs()
-                        .saturating_sub(ts));
+                        .saturating_sub(ts)
+                );
             }
         }
     }
-    eprintln!("Indexing Firefox checkout at {}...", checkout.path.display());
+    eprintln!(
+        "Indexing Firefox checkout at {}...",
+        checkout.path.display()
+    );
     let stats = index::update_index(&checkout.path, verbose > 0)?;
     if json {
         println!("{}", serde_json::to_string_pretty(&stats)?);
@@ -356,7 +362,10 @@ fn cmd_diagnose(raw_input: Option<&str>, json: bool, verbose: u8) -> anyhow::Res
 
     // Try "test-name platform" format first (e.g. "raptor-speedometer linux64")
     if let Some(tp) = input::try_parse_test_platform(raw) {
-        eprintln!("Searching for recent failures of {} on {}...", tp.test, tp.platform);
+        eprintln!(
+            "Searching for recent failures of {} on {}...",
+            tp.test, tp.platform
+        );
         // Find matching alerts via groom, filter by test name
         let diag = diagnosis::diagnose_test_platform(&tp.test, &tp.platform, verbose > 0)?;
         return if json {
@@ -382,10 +391,16 @@ fn cmd_diagnose(raw_input: Option<&str>, json: bool, verbose: u8) -> anyhow::Res
 
 fn print_diagnosis(diag: &diagnosis::Diagnosis) {
     println!("Signal: {}", diag.input_summary);
-    println!("Type: {:?} | Confidence: {:?}", diag.signal_type, diag.confidence);
+    println!(
+        "Type: {:?} | Confidence: {:?}",
+        diag.signal_type, diag.confidence
+    );
 
     if let Some(fr) = &diag.failure_rate {
-        println!("Failure rate: {}/{} runs ({:.1}%)", fr.failures, fr.total_runs, fr.rate_percent);
+        println!(
+            "Failure rate: {}/{} runs ({:.1}%)",
+            fr.failures, fr.total_runs, fr.rate_percent
+        );
     }
 
     if !diag.findings.is_empty() {
@@ -448,15 +463,21 @@ fn cmd_info(raw_input: Option<&str>, json: bool) -> anyhow::Result<()> {
         }
         InputSpec::Bug { bug_id } => {
             let bug = api::bugzilla::fetch_bug(*bug_id)?;
-            let alerts = api::perfherder::fetch_alert_summaries_for_bug(*bug_id)
-                .unwrap_or_default();
+            let alerts =
+                api::perfherder::fetch_alert_summaries_for_bug(*bug_id).unwrap_or_default();
             if json {
                 #[derive(serde::Serialize)]
                 struct BugInfo<'a> {
                     bug: &'a api::bugzilla::Bug,
                     alert_count: usize,
                 }
-                println!("{}", serde_json::to_string_pretty(&BugInfo { bug: &bug, alert_count: alerts.len() })?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&BugInfo {
+                        bug: &bug,
+                        alert_count: alerts.len()
+                    })?
+                );
             } else {
                 println!("Bug {}: {}", bug.id, bug.summary);
                 println!("Status: {} {}", bug.status, bug.resolution);

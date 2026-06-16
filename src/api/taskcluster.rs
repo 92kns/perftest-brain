@@ -33,4 +33,3 @@ pub fn list_artifacts_for_task(task_id: &str) -> Result<Vec<ArtifactRef>> {
 
     Ok(refs)
 }
-

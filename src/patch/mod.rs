@@ -150,24 +150,27 @@ fn find_test_manifest(input_summary: &str, _checkout_root: &Path) -> Option<Stri
 
     // 1. Try local index
     if let Ok(entries) = crate::index::search_tests(test_name) {
-        if let Some(e) = entries.into_iter().find(|e| {
-            e.path.ends_with(".toml") || e.path.ends_with(".ini")
-        }) {
+        if let Some(e) = entries
+            .into_iter()
+            .find(|e| e.path.ends_with(".toml") || e.path.ends_with(".ini"))
+        {
             return Some(e.path);
         }
     }
 
     // 2. Try searchfox-cli fallback
     if let Ok(results) = crate::index::searchfox::search_with_fallback(test_name, false) {
-        if let Some(r) = results.into_iter().find(|r| {
-            r.path.ends_with(".toml") || r.path.ends_with(".ini")
-        }) {
+        if let Some(r) = results
+            .into_iter()
+            .find(|r| r.path.ends_with(".toml") || r.path.ends_with(".ini"))
+        {
             return Some(r.path);
         }
     }
 
     // 3. Heuristic: if the summary already contains a file path
-    input_summary.split_whitespace()
+    input_summary
+        .split_whitespace()
         .find(|w| w.ends_with(".toml") || w.ends_with(".ini"))
         .map(|s| s.to_string())
 }

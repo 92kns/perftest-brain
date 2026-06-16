@@ -7,11 +7,19 @@ const PERFCOMPARE_HOSTS: &[&str] = &["perf.compare.firefox.com", "perfcompare.su
 const TREEHERDER_HOSTS: &[&str] = &["treeherder.mozilla.org"];
 const BUGZILLA_HOSTS: &[&str] = &["bugzilla.mozilla.org"];
 
+/// A test name + platform pair from freeform input like "raptor-speedometer3 linux64".
+#[derive(Debug, Clone)]
+pub struct TestPlatform {
+    pub test: String,
+    pub platform: String,
+}
+
 /// Parse any supported input string into an `InputSpec`.
 ///
 /// Accepted formats:
 /// - Plain integer → alert ID
 /// - 12-40 hex chars → push revision (assumes autoland)
+/// - "test-name platform" → test+platform pair (use with diagnose)
 /// - Bugzilla URL → bug ID
 /// - Treeherder perfherder/alerts URL → alert ID
 /// - Treeherder jobs URL → push
@@ -134,6 +142,36 @@ fn parse_perfcompare_url(url: &Url, _raw: &str) -> Result<InputSpec> {
     }
 
     bail!("Could not parse PerfCompare URL — expected baseLando/newLando or baseRev/newRev params")
+}
+
+/// Try to parse a "test-name platform" freeform string.
+///
+/// Returns `None` if the input doesn't look like a test+platform pair.
+/// Known platforms: linux64, windows11-64, macosx1015-64, android-hw, etc.
+pub fn try_parse_test_platform(raw: &str) -> Option<TestPlatform> {
+    let parts: Vec<&str> = raw.splitn(2, ' ').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let test = parts[0].trim();
+    let platform = parts[1].trim();
+
+    // Platform must look like a known CI platform token
+    let looks_like_platform = platform.starts_with("linux")
+        || platform.starts_with("windows")
+        || platform.starts_with("macos")
+        || platform.starts_with("android")
+        || platform.starts_with("win")
+        || platform == "all";
+
+    if looks_like_platform && !test.is_empty() {
+        Some(TestPlatform {
+            test: test.to_owned(),
+            platform: platform.to_owned(),
+        })
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

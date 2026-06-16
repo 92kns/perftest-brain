@@ -7,6 +7,7 @@ mod diagnosis;
 mod doctor;
 mod index;
 mod input;
+mod logs;
 mod patch;
 mod sheriff;
 mod tools;
@@ -232,17 +233,21 @@ fn cmd_groom(json: bool, verbose: u8) -> anyhow::Result<()> {
         results: Vec<serde_json::Value>,
     }
 
-    let url = "https://treeherder.mozilla.org/api/performance/alertsummary/?status=0&framework=13&limit=20";
+    // Fetch untriaged alerts across all perf frameworks (browsertime=13, mozperftest=15, talos=1, awsy=4)
+    let frameworks = [13u32, 15, 1, 4];
     if verbose > 0 {
-        eprintln!("Fetching untriaged browsertime alerts...");
+        eprintln!("Fetching untriaged alerts across all perf frameworks...");
     }
 
-    let list: AlertList = get_json(url)?;
-    let alert_ids: Vec<u64> = list
-        .results
-        .iter()
-        .filter_map(|v| v.get("id")?.as_u64())
-        .collect();
+    let mut alert_ids: Vec<u64> = Vec::new();
+    for fw in &frameworks {
+        let url = format!(
+            "https://treeherder.mozilla.org/api/performance/alertsummary/?status=0&framework={fw}&limit=10"
+        );
+        if let Ok(list) = get_json::<AlertList>(&url) {
+            alert_ids.extend(list.results.iter().filter_map(|v| v.get("id")?.as_u64()));
+        }
+    }
 
     if alert_ids.is_empty() {
         println!("No untriaged alerts found.");
@@ -344,8 +349,24 @@ fn cmd_update(checkout: &checkout::CheckoutRoot, json: bool, verbose: u8) -> any
 
 fn cmd_diagnose(raw_input: Option<&str>, json: bool, verbose: u8) -> anyhow::Result<()> {
     let raw = raw_input.ok_or_else(|| {
-        anyhow::anyhow!("Usage: perftest-brain diagnose <alert-id | URL | revision>")
+        anyhow::anyhow!(
+            "Usage: perftest-brain diagnose <alert-id | URL | revision | \"test-name platform\">"
+        )
     })?;
+
+    // Try "test-name platform" format first (e.g. "raptor-speedometer linux64")
+    if let Some(tp) = input::try_parse_test_platform(raw) {
+        eprintln!("Searching for recent failures of {} on {}...", tp.test, tp.platform);
+        // Find matching alerts via groom, filter by test name
+        let diag = diagnosis::diagnose_test_platform(&tp.test, &tp.platform, verbose > 0)?;
+        return if json {
+            println!("{}", serde_json::to_string_pretty(&diag)?);
+            Ok(())
+        } else {
+            print_diagnosis(&diag);
+            Ok(())
+        };
+    }
 
     let spec = input::parse_input(raw)?;
     let diag = diagnosis::diagnose(&spec, verbose > 0)?;
@@ -353,45 +374,43 @@ fn cmd_diagnose(raw_input: Option<&str>, json: bool, verbose: u8) -> anyhow::Res
     if json {
         println!("{}", serde_json::to_string_pretty(&diag)?);
     } else {
-        println!("Signal: {}", diag.input_summary);
-        println!(
-            "Type: {:?} | Confidence: {:?}",
-            diag.signal_type, diag.confidence
-        );
-
-        if let Some(fr) = &diag.failure_rate {
-            println!(
-                "Failure rate: {}/{} runs ({:.1}%)",
-                fr.failures, fr.total_runs, fr.rate_percent
-            );
-        }
-
-        if !diag.findings.is_empty() {
-            println!("\nFindings:");
-            for f in &diag.findings {
-                println!("  [{}] {}", f.category, f.description);
-                println!("  Root cause: {}", f.root_cause);
-            }
-        }
-
-        if let Some(noise) = &diag.noise_context {
-            println!("\nNoise context:\n{}", noise);
-        }
-
-        if !diag.existing_bugs.is_empty() {
-            println!("\nExisting bugs:");
-            for b in &diag.existing_bugs {
-                println!("  Bug {}: {} [{}]", b.id, b.summary, b.status);
-            }
-        }
-
-        println!("\nNext steps:");
-        for step in &diag.next_steps {
-            println!("  • {}", step);
-        }
+        print_diagnosis(&diag);
     }
 
     Ok(())
+}
+
+fn print_diagnosis(diag: &diagnosis::Diagnosis) {
+    println!("Signal: {}", diag.input_summary);
+    println!("Type: {:?} | Confidence: {:?}", diag.signal_type, diag.confidence);
+
+    if let Some(fr) = &diag.failure_rate {
+        println!("Failure rate: {}/{} runs ({:.1}%)", fr.failures, fr.total_runs, fr.rate_percent);
+    }
+
+    if !diag.findings.is_empty() {
+        println!("\nFindings:");
+        for f in &diag.findings {
+            println!("  [{}] {}", f.category, f.description);
+            println!("  Root cause: {}", f.root_cause);
+        }
+    }
+
+    if let Some(noise) = &diag.noise_context {
+        println!("\nNoise context:\n{}", noise);
+    }
+
+    if !diag.existing_bugs.is_empty() {
+        println!("\nExisting bugs:");
+        for b in &diag.existing_bugs {
+            println!("  Bug {}: {} [{}]", b.id, b.summary, b.status);
+        }
+    }
+
+    println!("\nNext steps:");
+    for step in &diag.next_steps {
+        println!("  • {}", step);
+    }
 }
 
 fn cmd_info(raw_input: Option<&str>, json: bool) -> anyhow::Result<()> {

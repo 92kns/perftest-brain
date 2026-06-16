@@ -139,21 +139,37 @@ fn determine_fixes(diag: &Diagnosis, checkout: &CheckoutRoot) -> Vec<manifest::M
     fixes
 }
 
-/// Search for the test manifest file corresponding to a test name.
+/// Search for the test manifest file for a test name.
 ///
-/// In Phase 5 we do a basic search of the index. Later phases can refine this.
+/// Priority: local SQLite index → searchfox-cli fallback → heuristic filename guess.
 fn find_test_manifest(input_summary: &str, _checkout_root: &Path) -> Option<String> {
-    // Extract test name hint from the input summary
-    let words: Vec<&str> = input_summary.split_whitespace().collect();
-    let test_hint = words
-        .iter()
-        .find(|w| w.contains('/') || w.ends_with(".toml") || w.ends_with(".ini"))?;
+    // Extract a test name token from the summary
+    let test_name = input_summary
+        .split_whitespace()
+        .find(|w| w.contains('-') || w.contains('/'))?;
 
-    if test_hint.ends_with(".toml") || test_hint.ends_with(".ini") {
-        return Some(test_hint.to_string());
+    // 1. Try local index
+    if let Ok(entries) = crate::index::search_tests(test_name) {
+        if let Some(e) = entries.into_iter().find(|e| {
+            e.path.ends_with(".toml") || e.path.ends_with(".ini")
+        }) {
+            return Some(e.path);
+        }
     }
 
-    None
+    // 2. Try searchfox-cli fallback
+    if let Ok(results) = crate::index::searchfox::search_with_fallback(test_name, false) {
+        if let Some(r) = results.into_iter().find(|r| {
+            r.path.ends_with(".toml") || r.path.ends_with(".ini")
+        }) {
+            return Some(r.path);
+        }
+    }
+
+    // 3. Heuristic: if the summary already contains a file path
+    input_summary.split_whitespace()
+        .find(|w| w.ends_with(".toml") || w.ends_with(".ini"))
+        .map(|s| s.to_string())
 }
 
 fn extract_platform(input_summary: &str) -> Option<String> {

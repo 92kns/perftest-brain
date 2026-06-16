@@ -4,6 +4,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::api;
+use crate::logs;
 use crate::types::{AlertSummary, InputSpec};
 
 /// Minimum number of runs required before diagnosis.
@@ -78,60 +79,114 @@ pub enum Confidence {
 /// when there is not enough data (caller should surface the retrigger recommendation).
 pub fn diagnose(spec: &InputSpec, verbose: bool) -> Result<Diagnosis> {
     match spec {
-        InputSpec::Alert { alert_id } => diagnose_alert(*alert_id, verbose),
-        InputSpec::Push { push } => Ok(insufficient_diagnosis(format!(
-            "Push {} — use 'info' to get the alert ID, then 'diagnose <alert-id>'",
-            push.revision
-        ))),
+        InputSpec::Alert { alert_id } => diagnose_alert(*alert_id, None, verbose),
+        InputSpec::Push { push } => {
+            // Fetch logs directly from Treeherder via treeherder-cli
+            let url = logs::treeherder_url(&push.revision, &push.repo);
+            let log_text = logs::fetch_failure_logs(&url)?;
+            let input_summary = format!("Push {} ({})", push.revision, push.repo);
+            Ok(diagnose_from_log(&log_text, &input_summary))
+        }
         InputSpec::Bug { bug_id } => {
-            // Look up the bug, then suggest the alert route
             let bug = api::bugzilla::fetch_bug(*bug_id)?;
+            let alerts = api::perfherder::fetch_alert_summaries_for_bug(*bug_id).unwrap_or_default();
+            if let Some(first) = alerts.first() {
+                diagnose_alert(first.id, Some(format!("Bug {}: {}", bug.id, bug.summary)), verbose)
+            } else {
+                Ok(insufficient_diagnosis(format!(
+                    "Bug {}: {} — no linked Perfherder alerts found. Pass an alert ID directly.",
+                    bug.id, bug.summary
+                )))
+            }
+        }
+        InputSpec::PerfCompare { base, new } => {
+            let url = logs::treeherder_url(&new.revision, &new.repo);
+            let log_text = logs::fetch_failure_logs(&url)?;
+            let input_summary = format!("PerfCompare base={} new={}", base.revision, new.revision);
+            Ok(diagnose_from_log(&log_text, &input_summary))
+        }
+        InputSpec::Lando { base_lando_id, new_lando_id, .. } => {
             Ok(insufficient_diagnosis(format!(
-                "Bug {}: {} — find the Perfherder alert ID linked from this bug and pass it to diagnose",
-                bug.id, bug.summary
+                "Lando compare base={} new={} — resolve to revision hashes first via perf-alert-cli",
+                base_lando_id, new_lando_id
             )))
         }
-        InputSpec::PerfCompare { base, new } => Ok(insufficient_diagnosis(format!(
-            "PerfCompare base={} new={} — pass the Perfherder alert ID for a full diagnosis",
-            base.revision, new.revision
-        ))),
-        InputSpec::Lando {
-            base_lando_id,
-            new_lando_id,
-            ..
-        } => Ok(insufficient_diagnosis(format!(
-            "Lando compare base={} new={} — pass the Perfherder alert ID for a full diagnosis",
-            base_lando_id, new_lando_id
-        ))),
     }
 }
 
-fn diagnose_alert(alert_id: u64, verbose: bool) -> Result<Diagnosis> {
+/// Diagnose by test name + platform: search Perfherder for recent matching alerts.
+pub fn diagnose_test_platform(test: &str, platform: &str, verbose: bool) -> Result<Diagnosis> {
+    use crate::api::get_json;
+
+    #[derive(serde::Deserialize)]
+    struct AlertList {
+        results: Vec<serde_json::Value>,
+    }
+
+    // Search across perf frameworks for alerts matching this test name
+    let frameworks = [13u32, 15, 1, 4];
+    let mut alert_ids: Vec<u64> = Vec::new();
+    for fw in &frameworks {
+        let url = format!(
+            "https://treeherder.mozilla.org/api/performance/alertsummary/?status=0&framework={fw}&limit=20"
+        );
+        if let Ok(list) = get_json::<AlertList>(&url) {
+            for v in &list.results {
+                if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
+                    alert_ids.push(id);
+                }
+            }
+        }
+    }
+
+    // Find the first alert that references our test name
+    for id in alert_ids {
+        if let Ok(summary) = api::perfherder::fetch_alert_summary(id) {
+            let matches_test = summary.regressions.iter().chain(summary.improvements.iter())
+                .any(|r| r.test.to_lowercase().contains(&test.to_lowercase())
+                    && r.platform.to_lowercase().contains(&platform.to_lowercase()));
+            if matches_test {
+                if verbose { eprintln!("Found matching alert: {}", id); }
+                return diagnose_alert(id, Some(format!("{} on {}", test, platform)), verbose);
+            }
+        }
+    }
+
+    Ok(insufficient_diagnosis(format!(
+        "No recent untriaged alerts found for '{}' on '{}'. \
+         Try passing an alert ID directly.",
+        test, platform
+    )))
+}
+
+fn diagnose_alert(alert_id: u64, summary_override: Option<String>, verbose: bool) -> Result<Diagnosis> {
     if verbose {
         eprintln!("Fetching alert summary {}...", alert_id);
     }
 
     let summary = api::perfherder::fetch_alert_summary(alert_id)?;
-
-    // Classify signal type based on the alert status
     let signal_type = classify_signal_type(&summary);
 
-    let input_summary = format!(
+    let input_summary = summary_override.unwrap_or_else(|| format!(
         "Alert {} — {} ({}) on {}",
         summary.id, summary.status, summary.framework, summary.repository
-    );
+    ));
 
-    // Attempt stmo-cli historical signal quality check
+    // Try fetching actual failure logs via treeherder-cli for richer pattern matching
+    let log_text = summary.regressions.first()
+        .map(|r| logs::treeherder_url(&r.new_push.revision, &r.new_push.repo))
+        .and_then(|url| logs::fetch_failure_logs(&url).ok());
+
     let noise_context = fetch_noise_context(&summary, verbose);
-
-    // Attempt Bugzilla lookup for existing bugs
     let existing_bugs = find_existing_bugs(&summary, verbose);
-
-    // Try to fetch job run history from Treeherder for failure rate
     let failure_rate = compute_failure_rate(&summary, verbose);
 
-    // Match failure patterns
-    let findings = find_pattern_matches(&summary);
+    // Match against real log text if available, fall back to test name proxy
+    let findings = if let Some(ref log) = log_text {
+        find_pattern_matches_in_log(log)
+    } else {
+        find_pattern_matches_by_name(&summary)
+    };
 
     // Compute overall confidence
     let confidence = compute_confidence(&findings, &failure_rate, &existing_bugs);
@@ -219,9 +274,48 @@ fn classify_signal_type(summary: &AlertSummary) -> SignalType {
     }
 }
 
-fn find_pattern_matches(summary: &AlertSummary) -> Vec<Finding> {
-    // Match against test/suite names as a proxy for log content.
-    // Enrich with local index entries when available.
+/// Diagnose from raw log text (e.g. from treeherder-cli or a Push input).
+fn diagnose_from_log(log_text: &str, input_summary: &str) -> Diagnosis {
+    let findings = find_pattern_matches_in_log(log_text);
+    let confidence = if findings.is_empty() {
+        Confidence::Insufficient
+    } else {
+        Confidence::Medium
+    };
+    let mut next_steps: Vec<String> = findings.iter().map(|f| f.next_step.clone()).collect();
+    if findings.is_empty() {
+        next_steps.push("No known pattern matched in the job log.".into());
+    }
+    Diagnosis {
+        input_summary: input_summary.to_owned(),
+        signal_type: SignalType::Intermittent,
+        failure_rate: None,
+        findings,
+        existing_bugs: vec![],
+        next_steps,
+        confidence,
+        noise_context: None,
+    }
+}
+
+/// Match patterns against actual job log text.
+fn find_pattern_matches_in_log(log_text: &str) -> Vec<Finding> {
+    let lower = log_text.to_lowercase();
+    patterns::PATTERNS
+        .iter()
+        .filter(|p| p.matches.iter().all(|m| lower.contains(&m.to_lowercase())))
+        .map(|p| Finding {
+            category: p.category.into(),
+            description: p.description.into(),
+            root_cause: p.root_cause.into(),
+            next_step: p.next_step.into(),
+            matched_pattern: Some(p.description.into()),
+        })
+        .collect()
+}
+
+/// Match patterns against test/suite names when no log is available.
+fn find_pattern_matches_by_name(summary: &AlertSummary) -> Vec<Finding> {
     let index_context: String = summary
         .regressions
         .iter()
@@ -238,23 +332,16 @@ fn find_pattern_matches(summary: &AlertSummary) -> Vec<Finding> {
         "{} {} {} {}",
         summary.framework,
         summary.repository,
-        summary
-            .regressions
-            .iter()
+        summary.regressions.iter()
             .map(|r| format!("{} {} {}", r.test, r.suite, r.platform))
             .collect::<Vec<_>>()
             .join(" "),
         index_context,
-    )
-    .to_lowercase();
+    ).to_lowercase();
 
     patterns::PATTERNS
         .iter()
-        .filter(|p| {
-            p.matches
-                .iter()
-                .all(|m| combined.contains(&m.to_lowercase()))
-        })
+        .filter(|p| p.matches.iter().all(|m| combined.contains(&m.to_lowercase())))
         .map(|p| Finding {
             category: p.category.into(),
             description: p.description.into(),

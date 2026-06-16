@@ -4,8 +4,7 @@ use serde::Deserialize;
 use crate::api::get_json;
 use crate::types::ArtifactRef;
 
-const TC_BASE: &str =
-    "https://firefox-ci-tc.services.mozilla.com/api/queue/v1";
+const TC_BASE: &str = "https://firefox-ci-tc.services.mozilla.com/api/queue/v1";
 
 #[derive(Deserialize)]
 struct ArtifactsResponse {

@@ -17,9 +17,7 @@ struct JobsResponse {
 }
 
 pub fn fetch_jobs_for_push(push_id: u64, repo: &str) -> Result<Vec<Job>> {
-    let url = format!(
-        "{TREEHERDER_BASE}/jobs/?push_id={push_id}&repo={repo}&count=2000"
-    );
+    let url = format!("{TREEHERDER_BASE}/jobs/?push_id={push_id}&repo={repo}&count=2000");
     let resp: JobsResponse = get_json(&url)?;
 
     let fields = &resp.job_property_names;
@@ -41,10 +39,7 @@ pub fn fetch_jobs_for_push(push_id: u64, repo: &str) -> Result<Vec<Job>> {
         .into_iter()
         .map(|row| {
             Ok(Job {
-                id: row
-                    .get(i_id)
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0),
+                id: row.get(i_id).and_then(|v| v.as_u64()).unwrap_or(0),
                 job_type_name: row
                     .get(i_name)
                     .and_then(|v| v.as_str())

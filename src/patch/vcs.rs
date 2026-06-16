@@ -28,12 +28,7 @@ fn check_git(root: &Path) -> Result<VcsState> {
         return Ok(VcsState::Unknown);
     }
 
-    let out = tool.run(&[
-        "-C",
-        root.to_str().unwrap_or("."),
-        "status",
-        "--porcelain",
-    ])?;
+    let out = tool.run(&["-C", root.to_str().unwrap_or("."), "status", "--porcelain"])?;
 
     if out.exit_code != 0 {
         bail!(
@@ -60,11 +55,7 @@ fn check_hg(root: &Path) -> Result<VcsState> {
         return check_jj(root);
     }
 
-    let out = tool.run(&[
-        "-R",
-        root.to_str().unwrap_or("."),
-        "status",
-    ])?;
+    let out = tool.run(&["-R", root.to_str().unwrap_or("."), "status"])?;
 
     if out.exit_code != 0 {
         bail!(
@@ -90,19 +81,15 @@ fn check_jj(root: &Path) -> Result<VcsState> {
         return Ok(VcsState::Unknown);
     }
 
-    let out = tool.run(&[
-        "--repository",
-        root.to_str().unwrap_or("."),
-        "status",
-    ])?;
+    let out = tool.run(&["--repository", root.to_str().unwrap_or("."), "status"])?;
 
     if out.exit_code != 0 {
         return Ok(VcsState::Unknown);
     }
 
     // jj outputs "Working copy changes:" followed by changed files
-    let has_changes = out.stdout.contains("Working copy changes:")
-        && out.stdout.lines().count() > 1;
+    let has_changes =
+        out.stdout.contains("Working copy changes:") && out.stdout.lines().count() > 1;
 
     if has_changes {
         Ok(VcsState::Dirty {

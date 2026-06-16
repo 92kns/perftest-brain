@@ -58,7 +58,10 @@ pub fn apply_fix(fix: &ManifestFix, checkout_root: &Path) -> Result<String> {
     let patched = patch_content(&original, fix)?;
 
     if patched == original {
-        return Ok(format!("No change needed — fix already applied to {}", fix.target_file));
+        return Ok(format!(
+            "No change needed — fix already applied to {}",
+            fix.target_file
+        ));
     }
 
     // Atomic write: write to a tempfile in the same directory, then rename. [PATCH-04]
@@ -80,12 +83,8 @@ fn patch_content(original: &str, fix: &ManifestFix) -> Result<String> {
         FixKind::RequestLongerTimeout { multiplier } => {
             insert_or_replace_directive(original, "requestLongerTimeout", &multiplier.to_string())
         }
-        FixKind::SkipIf { condition, comment } => {
-            insert_skip_if(original, condition, comment)
-        }
-        FixKind::Disable { reason } => {
-            insert_or_replace_directive(original, "disabled", reason)
-        }
+        FixKind::SkipIf { condition, comment } => insert_skip_if(original, condition, comment),
+        FixKind::Disable { reason } => insert_or_replace_directive(original, "disabled", reason),
     }
 }
 
@@ -148,14 +147,17 @@ fn insert_skip_if(content: &str, condition: &str, comment: &str) -> Result<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn inserts_longer_timeout_directive() {
         let content = "[test_raptor_speedometer]\nurl = https://example.com\n";
         let result = insert_or_replace_directive(content, "requestLongerTimeout", "2").unwrap();
-        assert!(result.contains("requestLongerTimeout = 2"), "result: {result}");
+        assert!(
+            result.contains("requestLongerTimeout = 2"),
+            "result: {result}"
+        );
     }
 
     #[test]
@@ -177,14 +179,21 @@ mod tests {
         assert!(result.contains("Patched"), "result: {result}");
 
         let content = fs::read_to_string(&target).unwrap();
-        assert!(content.contains("requestLongerTimeout = 2"), "content: {content}");
+        assert!(
+            content.contains("requestLongerTimeout = 2"),
+            "content: {content}"
+        );
     }
 
     #[test]
     fn idempotent_when_already_applied() {
         let tmp = tempdir().unwrap();
         let target = tmp.path().join("test.ini");
-        fs::write(&target, "[test]\nrequestLongerTimeout = 2\nurl = https://x\n").unwrap();
+        fs::write(
+            &target,
+            "[test]\nrequestLongerTimeout = 2\nurl = https://x\n",
+        )
+        .unwrap();
 
         let fix = ManifestFix::longer_timeout("test.ini", 2);
         let result = apply_fix(&fix, tmp.path()).unwrap();

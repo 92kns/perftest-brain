@@ -123,7 +123,9 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Patch { input } => cmd_patch(input.as_deref(), &checkout, cli.json, cli.verbose),
         Commands::Sheriff { input } => cmd_sheriff(input.as_deref(), cli.json, cli.verbose),
         Commands::Groom => cmd_groom(cli.json, cli.verbose),
-        Commands::Doctor { harness } => cmd_doctor(harness.as_deref(), &checkout, cli.json, cli.verbose),
+        Commands::Doctor { harness } => {
+            cmd_doctor(harness.as_deref(), &checkout, cli.json, cli.verbose)
+        }
         Commands::Update => cmd_update(&checkout, cli.json, cli.verbose),
     }
 }
@@ -171,17 +173,27 @@ fn cmd_patch(
 }
 
 fn cmd_sheriff(raw_input: Option<&str>, json: bool, verbose: u8) -> anyhow::Result<()> {
-    let raw = raw_input.ok_or_else(|| {
-        anyhow::anyhow!("Usage: perftest-brain sheriff <alert-id | URL>")
-    })?;
+    let raw = raw_input
+        .ok_or_else(|| anyhow::anyhow!("Usage: perftest-brain sheriff <alert-id | URL>"))?;
     let spec = input::parse_input(raw)?;
     let analysis = sheriff::analyze(&spec, verbose > 0)?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&analysis)?);
     } else {
-        println!("{} | Backout: {}", analysis.tier, if analysis.backout_recommended { "YES" } else { "No" });
-        println!("Framework: {} | Worst regression: {:.1}%", analysis.framework, analysis.worst_regression_pct);
+        println!(
+            "{} | Backout: {}",
+            analysis.tier,
+            if analysis.backout_recommended {
+                "YES"
+            } else {
+                "No"
+            }
+        );
+        println!(
+            "Framework: {} | Worst regression: {:.1}%",
+            analysis.framework, analysis.worst_regression_pct
+        );
         println!("Test: {}", analysis.test_summary);
         println!("Classification: {}", analysis.classification_reasoning);
         println!("Backout reasoning: {}", analysis.backout_reasoning);
@@ -189,7 +201,10 @@ fn cmd_sheriff(raw_input: Option<&str>, json: bool, verbose: u8) -> anyhow::Resu
             println!("Platforms: {}", analysis.affected_platforms.join(", "));
         }
         if let Some(id) = analysis.alert_id {
-            println!("Treeherder: https://treeherder.mozilla.org/perfherder/alerts?id={}", id);
+            println!(
+                "Treeherder: https://treeherder.mozilla.org/perfherder/alerts?id={}",
+                id
+            );
         }
     }
     Ok(())
@@ -211,7 +226,8 @@ fn cmd_groom(json: bool, verbose: u8) -> anyhow::Result<()> {
     }
 
     let list: AlertList = get_json(url)?;
-    let alert_ids: Vec<u64> = list.results
+    let alert_ids: Vec<u64> = list
+        .results
         .iter()
         .filter_map(|v| v.get("id")?.as_u64())
         .collect();
@@ -227,7 +243,10 @@ fn cmd_groom(json: bool, verbose: u8) -> anyhow::Result<()> {
         println!("{}", serde_json::to_string_pretty(&entries)?);
     } else {
         println!("Groomed {} alerts (sorted by priority):", entries.len());
-        println!("{:<8} {:<8} {:<12} {:<10} {}", "Alert", "Tier", "Framework", "Score", "Test");
+        println!(
+            "{:<8} {:<8} {:<12} {:<10} {}",
+            "Alert", "Tier", "Framework", "Score", "Test"
+        );
         println!("{}", "-".repeat(72));
         for e in &entries {
             println!(
@@ -252,16 +271,18 @@ fn cmd_doctor(
     json: bool,
     verbose: u8,
 ) -> anyhow::Result<()> {
-    let harness = harness.ok_or_else(|| {
-        anyhow::anyhow!("Usage: perftest-brain doctor <raptor|mozperftest>")
-    })?;
+    let harness = harness
+        .ok_or_else(|| anyhow::anyhow!("Usage: perftest-brain doctor <raptor|mozperftest>"))?;
 
     let report = doctor::run_doctor(harness, &checkout.path, verbose > 0)?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
-        println!("Doctor report for {} — Overall: {}", report.harness, report.overall);
+        println!(
+            "Doctor report for {} — Overall: {}",
+            report.harness, report.overall
+        );
         println!("{}", "-".repeat(60));
         for check in &report.checks {
             let icon = match check.status {
@@ -269,7 +290,10 @@ fn cmd_doctor(
                 doctor::CheckStatus::Warn => "⚠",
                 doctor::CheckStatus::Fail => "✗",
             };
-            println!("{} [{}] {}: {}", icon, check.status, check.name, check.detail);
+            println!(
+                "{} [{}] {}: {}",
+                icon, check.status, check.name, check.detail
+            );
             if let Some(hint) = &check.fix_hint {
                 println!("  Fix: {}", hint);
             }
@@ -278,12 +302,11 @@ fn cmd_doctor(
     Ok(())
 }
 
-fn cmd_update(
-    checkout: &checkout::CheckoutRoot,
-    json: bool,
-    verbose: u8,
-) -> anyhow::Result<()> {
-    eprintln!("Indexing Firefox checkout at {}...", checkout.path.display());
+fn cmd_update(checkout: &checkout::CheckoutRoot, json: bool, verbose: u8) -> anyhow::Result<()> {
+    eprintln!(
+        "Indexing Firefox checkout at {}...",
+        checkout.path.display()
+    );
     let stats = index::update_index(&checkout.path, verbose > 0)?;
     if json {
         println!("{}", serde_json::to_string_pretty(&stats)?);
@@ -309,10 +332,16 @@ fn cmd_diagnose(raw_input: Option<&str>, json: bool, verbose: u8) -> anyhow::Res
         println!("{}", serde_json::to_string_pretty(&diag)?);
     } else {
         println!("Signal: {}", diag.input_summary);
-        println!("Type: {:?} | Confidence: {:?}", diag.signal_type, diag.confidence);
+        println!(
+            "Type: {:?} | Confidence: {:?}",
+            diag.signal_type, diag.confidence
+        );
 
         if let Some(fr) = &diag.failure_rate {
-            println!("Failure rate: {}/{} runs ({:.1}%)", fr.failures, fr.total_runs, fr.rate_percent);
+            println!(
+                "Failure rate: {}/{} runs ({:.1}%)",
+                fr.failures, fr.total_runs, fr.rate_percent
+            );
         }
 
         if !diag.findings.is_empty() {
@@ -344,9 +373,8 @@ fn cmd_diagnose(raw_input: Option<&str>, json: bool, verbose: u8) -> anyhow::Res
 }
 
 fn cmd_info(raw_input: Option<&str>, json: bool) -> anyhow::Result<()> {
-    let raw = raw_input.ok_or_else(|| {
-        anyhow::anyhow!("Usage: perftest-brain info <alert-id | URL | revision>")
-    })?;
+    let raw = raw_input
+        .ok_or_else(|| anyhow::anyhow!("Usage: perftest-brain info <alert-id | URL | revision>"))?;
 
     let spec = input::parse_input(raw)?;
 
@@ -356,7 +384,10 @@ fn cmd_info(raw_input: Option<&str>, json: bool) -> anyhow::Result<()> {
             if json {
                 println!("{}", serde_json::to_string_pretty(&summary)?);
             } else {
-                println!("Alert {}: {} ({})", summary.id, summary.status, summary.framework);
+                println!(
+                    "Alert {}: {} ({})",
+                    summary.id, summary.status, summary.framework
+                );
                 println!("Repository: {}", summary.repository);
                 println!("Regressions: {}", summary.regressions.len());
                 println!("Improvements: {}", summary.improvements.len());
@@ -388,7 +419,10 @@ fn cmd_info(raw_input: Option<&str>, json: bool) -> anyhow::Result<()> {
                 println!("{}", serde_json::to_string_pretty(&spec)?);
             } else {
                 println!("Push: {} ({})", push.revision, push.repo);
-                println!("Treeherder: https://treeherder.mozilla.org/jobs?repo={}&revision={}", push.repo, push.revision);
+                println!(
+                    "Treeherder: https://treeherder.mozilla.org/jobs?repo={}&revision={}",
+                    push.repo, push.revision
+                );
             }
         }
         InputSpec::PerfCompare { base, new } => {
@@ -400,7 +434,12 @@ fn cmd_info(raw_input: Option<&str>, json: bool) -> anyhow::Result<()> {
                 println!("  New:  {} ({})", new.revision, new.repo);
             }
         }
-        InputSpec::Lando { base_lando_id, new_lando_id, base_repo, new_repo } => {
+        InputSpec::Lando {
+            base_lando_id,
+            new_lando_id,
+            base_repo,
+            new_repo,
+        } => {
             if json {
                 println!("{}", serde_json::to_string_pretty(&spec)?);
             } else {

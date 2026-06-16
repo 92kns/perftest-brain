@@ -60,20 +60,17 @@ fn which_available(name: &str) -> bool {
 
 /// Execute `binary` with `args` using argv-style invocation (no shell).
 fn run_command(binary: &str, args: &[&str]) -> Result<ProcessOutput, ToolError> {
-    let output = Command::new(binary)
-        .args(args)
-        .output()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                ToolError::NotFound(binary.to_owned())
-            } else {
-                ToolError::Failed {
-                    name: binary.to_owned(),
-                    exit_code: -1,
-                    stderr: e.to_string(),
-                }
+    let output = Command::new(binary).args(args).output().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            ToolError::NotFound(binary.to_owned())
+        } else {
+            ToolError::Failed {
+                name: binary.to_owned(),
+                exit_code: -1,
+                stderr: e.to_string(),
             }
-        })?;
+        }
+    })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -134,7 +131,9 @@ mod tests {
             matches!(err, ToolError::NotFound(_)),
             "expected NotFound, got: {err}"
         );
-        assert!(err.to_string().contains("__perftest_brain_nonexistent_tool__"));
+        assert!(err
+            .to_string()
+            .contains("__perftest_brain_nonexistent_tool__"));
     }
 
     #[test]

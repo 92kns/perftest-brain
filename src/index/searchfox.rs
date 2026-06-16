@@ -47,17 +47,17 @@ pub fn search_searchfox(query: &str) -> Result<Vec<SearchfoxResult>> {
 }
 
 /// Search the index; fall back to searchfox-cli if index is empty or returns nothing. [IDX-03]
-pub fn search_with_fallback(
-    query: &str,
-    verbose: bool,
-) -> Result<Vec<super::TestEntry>> {
+pub fn search_with_fallback(query: &str, verbose: bool) -> Result<Vec<super::TestEntry>> {
     let local = super::search_tests(query)?;
     if !local.is_empty() {
         return Ok(local);
     }
 
     if verbose {
-        eprintln!("Local index empty for {:?} — falling back to searchfox-cli", query);
+        eprintln!(
+            "Local index empty for {:?} — falling back to searchfox-cli",
+            query
+        );
     }
 
     let sfx = search_searchfox(query)?;

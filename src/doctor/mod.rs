@@ -130,8 +130,12 @@ fn check_raptor(checkout_root: &Path, verbose: bool) -> Vec<CheckResult> {
     ));
 
     if verbose {
-        eprintln!("Raptor checks complete: {}/{} OK",
-            checks.iter().filter(|c| c.status == CheckStatus::Ok).count(),
+        eprintln!(
+            "Raptor checks complete: {}/{} OK",
+            checks
+                .iter()
+                .filter(|c| c.status == CheckStatus::Ok)
+                .count(),
             checks.len()
         );
     }
@@ -186,8 +190,12 @@ fn check_mozperftest(checkout_root: &Path, verbose: bool) -> Vec<CheckResult> {
     ));
 
     if verbose {
-        eprintln!("mozperftest checks complete: {}/{} OK",
-            checks.iter().filter(|c| c.status == CheckStatus::Ok).count(),
+        eprintln!(
+            "mozperftest checks complete: {}/{} OK",
+            checks
+                .iter()
+                .filter(|c| c.status == CheckStatus::Ok)
+                .count(),
             checks.len()
         );
     }
@@ -246,13 +254,22 @@ fn check_binary(name: &str, binary: &str, version_arg: &str, fix_hint: &str) -> 
         Ok(out) if out.exit_code == 0 => CheckResult {
             name: name.to_owned(),
             status: CheckStatus::Ok,
-            detail: out.stdout.lines().next().unwrap_or("available").trim().to_owned(),
+            detail: out
+                .stdout
+                .lines()
+                .next()
+                .unwrap_or("available")
+                .trim()
+                .to_owned(),
             fix_hint: None,
         },
         Ok(out) => CheckResult {
             name: name.to_owned(),
             status: CheckStatus::Warn,
-            detail: format!("{binary} found but version check failed: {}", out.stderr.trim()),
+            detail: format!(
+                "{binary} found but version check failed: {}",
+                out.stderr.trim()
+            ),
             fix_hint: Some(fix_hint.to_owned()),
         },
         Err(e) => CheckResult {

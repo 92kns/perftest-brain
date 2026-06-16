@@ -75,7 +75,10 @@ pub enum Confidence {
 pub enum RunHistoryResult {
     Sufficient(Vec<JobRun>),
     /// Not enough runs — user must retrigger N more times.
-    NeedRetrigger { have: usize, need: usize },
+    NeedRetrigger {
+        have: usize,
+        need: usize,
+    },
 }
 
 /// One job run record.
@@ -93,12 +96,10 @@ pub struct JobRun {
 pub fn diagnose(spec: &InputSpec, verbose: bool) -> Result<Diagnosis> {
     match spec {
         InputSpec::Alert { alert_id } => diagnose_alert(*alert_id, verbose),
-        InputSpec::Push { push } => {
-            Ok(insufficient_diagnosis(format!(
-                "Push {} — use 'info' to get the alert ID, then 'diagnose <alert-id>'",
-                push.revision
-            )))
-        }
+        InputSpec::Push { push } => Ok(insufficient_diagnosis(format!(
+            "Push {} — use 'info' to get the alert ID, then 'diagnose <alert-id>'",
+            push.revision
+        ))),
         InputSpec::Bug { bug_id } => {
             // Look up the bug, then suggest the alert route
             let bug = api::bugzilla::fetch_bug(*bug_id)?;
@@ -107,18 +108,18 @@ pub fn diagnose(spec: &InputSpec, verbose: bool) -> Result<Diagnosis> {
                 bug.id, bug.summary
             )))
         }
-        InputSpec::PerfCompare { base, new } => {
-            Ok(insufficient_diagnosis(format!(
-                "PerfCompare base={} new={} — pass the Perfherder alert ID for a full diagnosis",
-                base.revision, new.revision
-            )))
-        }
-        InputSpec::Lando { base_lando_id, new_lando_id, .. } => {
-            Ok(insufficient_diagnosis(format!(
-                "Lando compare base={} new={} — pass the Perfherder alert ID for a full diagnosis",
-                base_lando_id, new_lando_id
-            )))
-        }
+        InputSpec::PerfCompare { base, new } => Ok(insufficient_diagnosis(format!(
+            "PerfCompare base={} new={} — pass the Perfherder alert ID for a full diagnosis",
+            base.revision, new.revision
+        ))),
+        InputSpec::Lando {
+            base_lando_id,
+            new_lando_id,
+            ..
+        } => Ok(insufficient_diagnosis(format!(
+            "Lando compare base={} new={} — pass the Perfherder alert ID for a full diagnosis",
+            base_lando_id, new_lando_id
+        ))),
     }
 }
 
@@ -155,7 +156,8 @@ fn diagnose_alert(alert_id: u64, verbose: bool) -> Result<Diagnosis> {
     // Build next steps
     let mut next_steps = Vec::new();
     if findings.is_empty() {
-        next_steps.push("No known pattern matched. Check the full job log for error details.".into());
+        next_steps
+            .push("No known pattern matched. Check the full job log for error details.".into());
         next_steps.push(format!(
             "Treeherder: https://treeherder.mozilla.org/perfherder/alerts?id={}",
             alert_id
@@ -167,7 +169,9 @@ fn diagnose_alert(alert_id: u64, verbose: bool) -> Result<Diagnosis> {
     }
 
     if existing_bugs.is_empty() {
-        next_steps.push("No existing Bugzilla bug found — consider filing one if this is recurring.".into());
+        next_steps.push(
+            "No existing Bugzilla bug found — consider filing one if this is recurring.".into(),
+        );
     } else {
         for b in &existing_bugs {
             next_steps.push(format!(
@@ -234,7 +238,11 @@ fn find_pattern_matches(summary: &AlertSummary) -> Vec<Finding> {
 
     patterns::PATTERNS
         .iter()
-        .filter(|p| p.matches.iter().all(|m| combined.contains(&m.to_lowercase())))
+        .filter(|p| {
+            p.matches
+                .iter()
+                .all(|m| combined.contains(&m.to_lowercase()))
+        })
         .map(|p| Finding {
             category: p.category.into(),
             description: p.description.into(),
@@ -249,10 +257,7 @@ fn compute_failure_rate(summary: &AlertSummary, verbose: bool) -> Option<Failure
     // Failure rate requires fetching individual job runs from Treeherder.
     // This is done via the jobs API keyed on push_id.
     if verbose {
-        eprintln!(
-            "Fetching job runs for push_id {}...",
-            summary.push_id
-        );
+        eprintln!("Fetching job runs for push_id {}...", summary.push_id);
     }
 
     match api::treeherder::fetch_jobs_for_push(summary.push_id, &summary.repository) {
@@ -314,7 +319,10 @@ fn find_existing_bugs(summary: &AlertSummary, verbose: bool) -> Vec<ExistingBug>
     };
 
     if verbose {
-        eprintln!("Searching Bugzilla for existing bugs matching {:?}...", test_name);
+        eprintln!(
+            "Searching Bugzilla for existing bugs matching {:?}...",
+            test_name
+        );
     }
 
     match api::bugzilla::search_intermittent_bugs(&test_name) {

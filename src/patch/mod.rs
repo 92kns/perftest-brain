@@ -53,7 +53,9 @@ pub fn patch(
     if fixes.is_empty() {
         return Ok(PatchResult {
             applied: vec![],
-            skipped: vec!["No patchable issues found — diagnosis did not match any fix template.".into()],
+            skipped: vec![
+                "No patchable issues found — diagnosis did not match any fix template.".into(),
+            ],
             next_steps: diag.next_steps,
         });
     }
@@ -120,8 +122,7 @@ fn determine_fixes(diag: &Diagnosis, checkout: &CheckoutRoot) -> Vec<manifest::M
             "no_data" | "infrastructure" => {
                 // Infrastructure / transient — add a skip-if for the failing platform
                 if let Some(platform) = extract_platform(&diag.input_summary) {
-                    if let Some(test_file) =
-                        find_test_manifest(&diag.input_summary, &checkout.path)
+                    if let Some(test_file) = find_test_manifest(&diag.input_summary, &checkout.path)
                     {
                         fixes.push(manifest::ManifestFix::skip_if(
                             test_file,

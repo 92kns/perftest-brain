@@ -3,10 +3,7 @@ use url::Url;
 
 use crate::types::{InputSpec, Push};
 
-const PERFCOMPARE_HOSTS: &[&str] = &[
-    "perf.compare.firefox.com",
-    "perfcompare.surge.sh",
-];
+const PERFCOMPARE_HOSTS: &[&str] = &["perf.compare.firefox.com", "perfcompare.surge.sh"];
 const TREEHERDER_HOSTS: &[&str] = &["treeherder.mozilla.org"];
 const BUGZILLA_HOSTS: &[&str] = &["bugzilla.mozilla.org"];
 
@@ -29,18 +26,19 @@ pub fn parse_input(raw: &str) -> Result<InputSpec> {
     }
 
     // 12–40 hex chars → push revision on autoland
-    if raw.len() >= 12
-        && raw.len() <= 40
-        && raw.chars().all(|c| c.is_ascii_hexdigit())
-    {
+    if raw.len() >= 12 && raw.len() <= 40 && raw.chars().all(|c| c.is_ascii_hexdigit()) {
         return Ok(InputSpec::Push {
             push: Push::autoland(raw),
         });
     }
 
     // Everything else must be a URL
-    let url = Url::parse(raw)
-        .map_err(|_| anyhow!("Cannot parse input: {:?} — expected a URL, alert ID, or revision hash", raw))?;
+    let url = Url::parse(raw).map_err(|_| {
+        anyhow!(
+            "Cannot parse input: {:?} — expected a URL, alert ID, or revision hash",
+            raw
+        )
+    })?;
 
     let host = url.host_str().unwrap_or("");
 
@@ -104,9 +102,7 @@ fn parse_perfcompare_url(url: &Url, _raw: &str) -> Result<InputSpec> {
     let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
 
     // Lando-based compare
-    if let (Some(base_lando), Some(new_lando)) =
-        (params.get("baseLando"), params.get("newLando"))
-    {
+    if let (Some(base_lando), Some(new_lando)) = (params.get("baseLando"), params.get("newLando")) {
         return Ok(InputSpec::Lando {
             base_lando_id: base_lando.clone(),
             new_lando_id: new_lando.clone(),
@@ -162,11 +158,7 @@ mod tests {
 
     #[test]
     fn treeherder_perfherder_alert_url() {
-        match parse_input(
-            "https://treeherder.mozilla.org/perfherder/alerts?id=44793",
-        )
-        .unwrap()
-        {
+        match parse_input("https://treeherder.mozilla.org/perfherder/alerts?id=44793").unwrap() {
             InputSpec::Alert { alert_id: 44793 } => {}
             other => panic!("{other:?}"),
         }
@@ -174,10 +166,8 @@ mod tests {
 
     #[test]
     fn treeherder_push_url() {
-        match parse_input(
-            "https://treeherder.mozilla.org/jobs?repo=autoland&revision=abc123def456",
-        )
-        .unwrap()
+        match parse_input("https://treeherder.mozilla.org/jobs?repo=autoland&revision=abc123def456")
+            .unwrap()
         {
             InputSpec::Push { push } => {
                 assert_eq!(push.revision, "abc123def456");
@@ -189,11 +179,7 @@ mod tests {
 
     #[test]
     fn bugzilla_url() {
-        match parse_input(
-            "https://bugzilla.mozilla.org/show_bug.cgi?id=2042450",
-        )
-        .unwrap()
-        {
+        match parse_input("https://bugzilla.mozilla.org/show_bug.cgi?id=2042450").unwrap() {
             InputSpec::Bug { bug_id: 2042450 } => {}
             other => panic!("{other:?}"),
         }

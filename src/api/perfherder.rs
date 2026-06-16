@@ -109,10 +109,7 @@ pub fn fetch_alert_summaries_for_bug(bug_id: u64) -> Result<Vec<AlertSummary>> {
 
 fn convert_summary(raw: PhAlertSummary) -> AlertSummary {
     let repo = raw.repository.unwrap_or_else(|| "mozilla-central".into());
-    let base_push = Push::new(
-        raw.prev_push_revision.unwrap_or_default(),
-        repo.clone(),
-    );
+    let base_push = Push::new(raw.prev_push_revision.unwrap_or_default(), repo.clone());
     let new_push = Push::new(raw.revision.unwrap_or_default(), repo.clone());
 
     let all_results: Vec<AlertResult> = raw

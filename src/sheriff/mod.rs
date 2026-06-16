@@ -101,7 +101,10 @@ fn classify_alert(alert_id: u64, summary: &AlertSummary) -> SheriffAnalysis {
     let multi_platform = affected_platforms.len() > 1;
 
     // Tier classification logic
-    let (tier, class_reason) = if worst_pct >= 10.0 && is_critical_framework && (is_primary_test || multi_platform) {
+    let (tier, class_reason) = if worst_pct >= 10.0
+        && is_critical_framework
+        && (is_primary_test || multi_platform)
+    {
         (
             Tier::Tier1,
             format!(
@@ -170,7 +173,13 @@ fn classify_alert(alert_id: u64, summary: &AlertSummary) -> SheriffAnalysis {
         .regressions
         .first()
         .map(|r| format!("{}/{} on {}", r.suite, r.test, r.platform))
-        .unwrap_or_else(|| summary.improvements.first().map(|r| format!("improvement: {}/{}", r.suite, r.test)).unwrap_or_else(|| "no alerts".into()));
+        .unwrap_or_else(|| {
+            summary
+                .improvements
+                .first()
+                .map(|r| format!("improvement: {}/{}", r.suite, r.test))
+                .unwrap_or_else(|| "no alerts".into())
+        });
 
     SheriffAnalysis {
         alert_id: Some(alert_id),
@@ -232,14 +241,16 @@ pub fn groom(alert_ids: &[u64], verbose: bool) -> Result<Vec<GroomEntry>> {
             test_summary: analysis.test_summary,
             status: summary.status,
             suggested_owner,
-            treeherder_url: format!(
-                "https://treeherder.mozilla.org/perfherder/alerts?id={id}"
-            ),
+            treeherder_url: format!("https://treeherder.mozilla.org/perfherder/alerts?id={id}"),
         });
     }
 
     // Sort by score descending (highest priority first)
-    entries.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    entries.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(entries)
 }
 

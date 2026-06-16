@@ -14,6 +14,7 @@ mod types;
 
 use types::InputSpec;
 
+const AGENTS_MD: &str = include_str!("../AGENTS.md");
 const NOT_IMPLEMENTED: &str = "Not yet implemented — coming in a future phase";
 
 #[derive(Parser)]
@@ -70,6 +71,11 @@ enum Commands {
         /// Signal: alert ID, Treeherder URL, Bugzilla URL, or revision hash.
         input: Option<String>,
     },
+    /// Print the AI agent usage guide (AGENTS.md) to stdout.
+    ///
+    /// Pipe to feed directly to an AI agent as context:
+    ///   perftest-brain agents | <your-ai-tool>
+    Agents,
 }
 
 fn main() {
@@ -108,6 +114,12 @@ fn escape_json(s: &str) -> String {
 }
 
 fn run(cli: Cli) -> anyhow::Result<()> {
+    // `agents` doesn't need a checkout — handle before resolution.
+    if matches!(cli.command, Commands::Agents) {
+        print!("{}", AGENTS_MD);
+        return Ok(());
+    }
+
     let checkout = checkout::resolve(
         cli.checkout_path.as_deref(),
         std::env::var("PERFTEST_BRAIN_CHECKOUT").ok(),
@@ -127,6 +139,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             cmd_doctor(harness.as_deref(), &checkout, cli.json, cli.verbose)
         }
         Commands::Update => cmd_update(&checkout, cli.json, cli.verbose),
+        Commands::Agents => unreachable!("handled above"),
     }
 }
 

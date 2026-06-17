@@ -64,8 +64,12 @@ enum Commands {
         /// Harness to check (raptor, mozperftest).
         harness: Option<String>,
     },
-    /// Update the local test-metadata index.
+    /// Update perftest-brain to the latest version from GitHub.
+    ///
+    /// Equivalent to: cargo install --force --git https://github.com/92kns/perftest-brain
     Update,
+    /// Rebuild the local test-metadata index from the Firefox checkout.
+    Reindex,
     /// Show information about a signal or the current checkout.
     Info {
         /// Signal: alert ID, Treeherder URL, Bugzilla URL, or revision hash.
@@ -114,10 +118,14 @@ fn escape_json(s: &str) -> String {
 }
 
 fn run(cli: Cli) -> anyhow::Result<()> {
-    // Commands that don't require being inside a checkout.
-    if matches!(cli.command, Commands::Agents) {
-        print!("{}", AGENTS_MD);
-        return Ok(());
+    // Commands that don't need a checkout at all.
+    match cli.command {
+        Commands::Agents => {
+            print!("{}", AGENTS_MD);
+            return Ok(());
+        }
+        Commands::Update => return cmd_self_update(),
+        _ => {}
     }
 
     let checkout = checkout::resolve(
@@ -138,9 +146,59 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Doctor { harness } => {
             cmd_doctor(harness.as_deref(), &checkout, cli.json, cli.verbose)
         }
-        Commands::Update => cmd_update(&checkout, cli.json, cli.verbose),
-        Commands::Agents => unreachable!("handled above"),
+        Commands::Reindex => cmd_reindex(&checkout, cli.json, cli.verbose),
+        Commands::Agents | Commands::Update => unreachable!("handled above"),
     }
+}
+
+const REPO_URL: &str = "https://github.com/92kns/perftest-brain";
+
+fn cmd_self_update() -> anyhow::Result<()> {
+    const CURRENT: &str = env!("CARGO_PKG_VERSION");
+
+    let latest = fetch_latest_tag().unwrap_or_else(|e| {
+        eprintln!("warn: could not check latest version: {}", e);
+        None
+    });
+
+    match &latest {
+        Some(tag) if tag.trim_start_matches('v') == CURRENT => {
+            println!("Already up to date (v{}).", CURRENT);
+            return Ok(());
+        }
+        Some(tag) => println!("Updating v{} → {} ...", CURRENT, tag),
+        None => println!("Updating perftest-brain (current: v{})...", CURRENT),
+    }
+
+    let mut args = vec!["install", "--force", "--git", REPO_URL];
+    let tag_owned;
+    if let Some(ref tag) = latest {
+        tag_owned = tag.clone();
+        args.extend_from_slice(&["--tag", &tag_owned]);
+    }
+
+    let status = std::process::Command::new("cargo").args(&args).status()?;
+    if status.success() {
+        println!("Updated successfully.");
+        Ok(())
+    } else {
+        anyhow::bail!("cargo install exited with status {}", status)
+    }
+}
+
+fn fetch_latest_tag() -> anyhow::Result<Option<String>> {
+    #[derive(serde::Deserialize)]
+    struct Tag { name: String }
+
+    let url = "https://api.github.com/repos/92kns/perftest-brain/tags";
+    let body = ureq::get(url)
+        .set("Accept", "application/vnd.github.v3+json")
+        .set("User-Agent", concat!("perftest-brain/", env!("CARGO_PKG_VERSION")))
+        .call()?
+        .into_string()?;
+
+    let tags: Vec<Tag> = serde_json::from_str(&body)?;
+    Ok(tags.into_iter().next().map(|t| t.name))
 }
 
 fn cmd_patch(
@@ -319,7 +377,7 @@ fn cmd_doctor(
     Ok(())
 }
 
-fn cmd_update(checkout: &checkout::CheckoutRoot, json: bool, verbose: u8) -> anyhow::Result<()> {
+fn cmd_reindex(checkout: &checkout::CheckoutRoot, json: bool, verbose: u8) -> anyhow::Result<()> {
     if verbose > 0 {
         if let Ok(prev) = index::index_stats() {
             if let Some(ts) = prev.last_updated {

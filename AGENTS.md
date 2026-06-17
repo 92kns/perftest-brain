@@ -84,11 +84,19 @@ perftest-brain doctor raptor --json
 
 Checks required tools and files for the given harness. Supported: `raptor`, `mozperftest`.
 
-### `update` — rebuild the local test index
+### `update` — update perftest-brain to the latest version
 
 ```
 perftest-brain update
-perftest-brain update --json
+```
+
+Self-update via `cargo install --force --git https://github.com/92kns/perftest-brain`. Checks the latest GitHub tag first and skips if already up to date.
+
+### `reindex` — rebuild the local test index
+
+```
+perftest-brain reindex
+perftest-brain reindex --json
 ```
 
 Walks `testing/raptor/`, `testing/mozperftest/`, `testing/performance/`, and `taskcluster/` in the checkout and writes an incremental SQLite index to the XDG data directory. Falls back to `searchfox-cli` when the index is insufficient.

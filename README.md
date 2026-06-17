@@ -76,7 +76,15 @@ perftest-brain doctor mozperftest
 
 Checks that all required tools and files are present for the given harness.
 
-### `update` — rebuild the local test index
+### `update` — update perftest-brain
+
+```
+perftest-brain update
+```
+
+Self-update to the latest version via `cargo install --force --git`.
+
+### `reindex` — rebuild the local test index
 
 ```
 perftest-brain update

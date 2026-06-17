@@ -181,8 +181,10 @@ pub fn diagnose_test_platform(test: &str, platform: &str, verbose: bool) -> Resu
 /// Detect whether a suite/test name looks like a CaR (Chromium-as-Release) job.
 fn is_car_test(suite: &str, test: &str) -> bool {
     let combined = format!("{suite} {test}").to_lowercase();
-    combined.contains("custom-car") || combined.contains("chromium-as-release")
-        || combined.contains("-car-") || combined.starts_with("car-")
+    combined.contains("custom-car")
+        || combined.contains("chromium-as-release")
+        || combined.contains("-car-")
+        || combined.starts_with("car-")
 }
 
 /// Delegate to car-mechanic-cli for CaR-related failures.
@@ -192,12 +194,10 @@ fn diagnose_car(alert_id: u64, suite: &str, test: &str, url: &str) -> Diagnosis 
     let car = CliTool::new("car-mechanic");
     let has_car = car.check_available();
 
-    let mut next_steps = vec![
-        format!(
-            "This is a CaR (Chromium-as-Release) test: {suite}/{test}. \
+    let mut next_steps = vec![format!(
+        "This is a CaR (Chromium-as-Release) test: {suite}/{test}. \
              Use car-mechanic-cli for diagnosis — it has the full CaR failure pattern database."
-        ),
-    ];
+    )];
 
     if has_car {
         // Try to run car-mechanic diagnose directly
@@ -224,9 +224,7 @@ fn diagnose_car(alert_id: u64, suite: &str, test: &str, url: &str) -> Diagnosis 
                 };
             }
             _ => {
-                next_steps.push(format!(
-                    "Run: car-mechanic diagnose --url '{url}'"
-                ));
+                next_steps.push(format!("Run: car-mechanic diagnose --url '{url}'"));
             }
         }
     } else {
@@ -237,7 +235,10 @@ fn diagnose_car(alert_id: u64, suite: &str, test: &str, url: &str) -> Diagnosis 
     }
 
     insufficient_diagnosis_with_steps(
-        format!("CaR Alert {} — {suite}/{test} (delegated to car-mechanic-cli)", alert_id),
+        format!(
+            "CaR Alert {} — {suite}/{test} (delegated to car-mechanic-cli)",
+            alert_id
+        ),
         next_steps,
     )
 }

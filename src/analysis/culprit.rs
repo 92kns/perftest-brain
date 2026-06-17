@@ -184,7 +184,7 @@ pub fn rank_commits(commits: Vec<Commit>, suite: &str, test: &str) -> Vec<Ranked
         })
         .collect();
 
-    ranked.sort_by(|a, b| b.score.cmp(&a.score));
+    ranked.sort_by_key(|c| std::cmp::Reverse(c.score));
     ranked
 }
 

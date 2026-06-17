@@ -1,8 +1,8 @@
 # perftest-brain
 
-CLI tool that acts as an embedded senior Firefox performance-test engineer. Diagnoses intermittent performance test failures, generates fix patches, and supports the sheriff triage workflow.
+Routes Firefox performance failure signals — Perfherder alerts, Treeherder job URLs, test names — through diagnosis, patch generation, and sheriff triage. Encodes harness-specific knowledge for raptor, mozperftest, and browsertime, and integrates with treeherder-cli, stmo-cli, and searchfox-cli already in your Firefox checkout.
 
-Encodes knowledge of the raptor, mozperftest, and browsertime harnesses. Designed for use by both engineers and AI agents.
+Designed for use by both engineers and AI agents.
 
 > For AI agents: see [AGENTS.md](AGENTS.md) for the full workflow guide, or run `perftest-brain agents`.
 

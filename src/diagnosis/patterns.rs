@@ -419,6 +419,23 @@ pub static PATTERNS: &[Pattern] = &[
         example_bug: Some(2038441),
     },
 
+    // ── CaR (Chromium-as-Release) failure — delegate to car-mechanic-cli ────────
+    Pattern {
+        category: "car",
+        description: "CaR (Chromium-as-Release) build or test failure",
+        matches: &["custom-car"],
+        root_cause: "This is a CaR (Chromium-as-Release) failure. \
+                     perftest-brain does not have CaR-specific pattern knowledge — \
+                     car-mechanic-cli does.",
+        next_step: "Use car-mechanic-cli for this failure: \
+                    `car-mechanic diagnose --url <treeherder-url>`. \
+                    car-mechanic encodes ~40 known CaR failure patterns with fix steps. \
+                    Install: cargo install --git https://github.com/92kns/car-mechanic-cli",
+        fix_type: FixType::CodeFix,
+        platform_hints: &[],
+        example_bug: None,
+    },
+
     // ── Network error ─────────────────────────────────────────────────────────
     Pattern {
         category: "network",

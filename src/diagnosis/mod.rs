@@ -178,6 +178,70 @@ pub fn diagnose_test_platform(test: &str, platform: &str, verbose: bool) -> Resu
     )))
 }
 
+/// Detect whether a suite/test name looks like a CaR (Chromium-as-Release) job.
+fn is_car_test(suite: &str, test: &str) -> bool {
+    let combined = format!("{suite} {test}").to_lowercase();
+    combined.contains("custom-car") || combined.contains("chromium-as-release")
+        || combined.contains("-car-") || combined.starts_with("car-")
+}
+
+/// Delegate to car-mechanic-cli for CaR-related failures.
+fn diagnose_car(alert_id: u64, suite: &str, test: &str, url: &str) -> Diagnosis {
+    use crate::tools::{CliTool, Tool};
+
+    let car = CliTool::new("car-mechanic");
+    let has_car = car.check_available();
+
+    let mut next_steps = vec![
+        format!(
+            "This is a CaR (Chromium-as-Release) test: {suite}/{test}. \
+             Use car-mechanic-cli for diagnosis — it has the full CaR failure pattern database."
+        ),
+    ];
+
+    if has_car {
+        // Try to run car-mechanic diagnose directly
+        match car.run(&["diagnose", "--url", url, "--json"]) {
+            Ok(out) if out.exit_code == 0 && !out.stdout.trim().is_empty() => {
+                return Diagnosis {
+                    input_summary: format!("CaR Alert {} — {suite}/{test}", alert_id),
+                    signal_type: SignalType::Inconclusive,
+                    failure_rate: None,
+                    findings: vec![Finding {
+                        category: "car_delegated".into(),
+                        description: "Delegated to car-mechanic-cli".into(),
+                        root_cause: out.stdout.trim().chars().take(500).collect(),
+                        next_step: "See car-mechanic output above for fix steps.".into(),
+                        matched_pattern: None,
+                        fix_type: "CodeFix".into(),
+                        platform_hints: vec![],
+                        example_bug: None,
+                    }],
+                    existing_bugs: vec![],
+                    next_steps: vec!["See car-mechanic-cli output above.".into()],
+                    confidence: Confidence::Medium,
+                    noise_context: None,
+                };
+            }
+            _ => {
+                next_steps.push(format!(
+                    "Run: car-mechanic diagnose --url '{url}'"
+                ));
+            }
+        }
+    } else {
+        next_steps.push(
+            "Install car-mechanic-cli: cargo install --git https://github.com/92kns/car-mechanic-cli".into()
+        );
+        next_steps.push(format!("Then: car-mechanic diagnose --url '{url}'"));
+    }
+
+    insufficient_diagnosis_with_steps(
+        format!("CaR Alert {} — {suite}/{test} (delegated to car-mechanic-cli)", alert_id),
+        next_steps,
+    )
+}
+
 fn diagnose_alert(
     alert_id: u64,
     summary_override: Option<String>,
@@ -188,6 +252,15 @@ fn diagnose_alert(
     }
 
     let summary = api::perfherder::fetch_alert_summary(alert_id)?;
+
+    // CaR tests belong to car-mechanic-cli — hand off early.
+    if let Some(r) = summary.regressions.first().or(summary.improvements.first()) {
+        if is_car_test(&r.suite, &r.test) {
+            let url = logs::treeherder_url(&r.new_push.revision, &r.new_push.repo);
+            return Ok(diagnose_car(alert_id, &r.suite, &r.test, &url));
+        }
+    }
+
     let signal_type = classify_signal_type(&summary);
 
     let input_summary = summary_override.unwrap_or_else(|| {
@@ -502,13 +575,17 @@ fn extract_task_id_from_url(url: &str) -> Option<String> {
 }
 
 fn insufficient_diagnosis(message: String) -> Diagnosis {
+    insufficient_diagnosis_with_steps(message.clone(), vec![message])
+}
+
+fn insufficient_diagnosis_with_steps(summary: String, next_steps: Vec<String>) -> Diagnosis {
     Diagnosis {
-        input_summary: message.clone(),
+        input_summary: summary,
         signal_type: SignalType::Inconclusive,
         failure_rate: None,
         findings: vec![],
         existing_bugs: vec![],
-        next_steps: vec![message],
+        next_steps,
         confidence: Confidence::Insufficient,
         noise_context: None,
     }

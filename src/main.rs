@@ -142,12 +142,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
     // Resolve checkout only for commands that need it.
     let needs_checkout = matches!(
         cli.command,
-        Commands::Diagnose { .. }
-            | Commands::Patch { .. }
-            | Commands::Sheriff { .. }
-            | Commands::Groom
-            | Commands::Doctor { .. }
-            | Commands::Reindex
+        Commands::Patch { .. } | Commands::Doctor { .. } | Commands::Reindex
     );
 
     let checkout = if needs_checkout {

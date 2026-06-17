@@ -188,12 +188,17 @@ fn cmd_self_update() -> anyhow::Result<()> {
 
 fn fetch_latest_tag() -> anyhow::Result<Option<String>> {
     #[derive(serde::Deserialize)]
-    struct Tag { name: String }
+    struct Tag {
+        name: String,
+    }
 
     let url = "https://api.github.com/repos/92kns/perftest-brain/tags";
     let body = ureq::get(url)
         .set("Accept", "application/vnd.github.v3+json")
-        .set("User-Agent", concat!("perftest-brain/", env!("CARGO_PKG_VERSION")))
+        .set(
+            "User-Agent",
+            concat!("perftest-brain/", env!("CARGO_PKG_VERSION")),
+        )
         .call()?
         .into_string()?;
 

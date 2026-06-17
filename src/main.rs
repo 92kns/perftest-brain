@@ -166,7 +166,9 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Commands::Reindex => cmd_reindex(&checkout, cli.json, cli.verbose),
         Commands::Commits { input } => cmd_commits(&input, cli.json, cli.verbose),
-        Commands::Profiles { input, test } => cmd_profiles(&input, test.as_deref(), cli.json, cli.verbose),
+        Commands::Profiles { input, test } => {
+            cmd_profiles(&input, test.as_deref(), cli.json, cli.verbose)
+        }
         Commands::Agents | Commands::Update => unreachable!("handled above"),
     }
 }
@@ -442,9 +444,14 @@ fn cmd_commits(raw_input: &str, json: bool, verbose: u8) -> anyhow::Result<()> {
     // Resolve to a base/new push pair
     let (base_push, new_push, suite, test) = match &spec {
         types::InputSpec::Alert { alert_id } => {
-            if verbose > 0 { eprintln!("Fetching alert {}...", alert_id); }
+            if verbose > 0 {
+                eprintln!("Fetching alert {}...", alert_id);
+            }
             let summary = api::perfherder::fetch_alert_summary(*alert_id)?;
-            let first = summary.regressions.first().or(summary.improvements.first())
+            let first = summary
+                .regressions
+                .first()
+                .or(summary.improvements.first())
                 .ok_or_else(|| anyhow::anyhow!("Alert {} has no alerts", alert_id))?;
             let suite = first.suite.clone();
             let test = first.test.clone();
@@ -454,14 +461,19 @@ fn cmd_commits(raw_input: &str, json: bool, verbose: u8) -> anyhow::Result<()> {
             (base.clone(), new.clone(), String::new(), String::new())
         }
         types::InputSpec::Push { .. } => {
-            anyhow::bail!("Pass an alert ID or PerfCompare URL to get a regression window. \
-                           A single push revision has no base to compare against.")
+            anyhow::bail!(
+                "Pass an alert ID or PerfCompare URL to get a regression window. \
+                           A single push revision has no base to compare against."
+            )
         }
         _ => anyhow::bail!("Pass an alert ID or PerfCompare URL for commit analysis."),
     };
 
     if verbose > 0 {
-        eprintln!("Fetching commits {} → {}...", base_push.revision, new_push.revision);
+        eprintln!(
+            "Fetching commits {} → {}...",
+            base_push.revision, new_push.revision
+        );
     }
 
     let commits = api::pushlog::fetch_commit_window(&base_push, &new_push)?;
@@ -470,26 +482,45 @@ fn cmd_commits(raw_input: &str, json: bool, verbose: u8) -> anyhow::Result<()> {
     if json {
         println!("{}", serde_json::to_string_pretty(&ranked)?);
     } else {
-        print!("{}", analysis::culprit::format_ranked(&ranked, &suite, &test));
+        print!(
+            "{}",
+            analysis::culprit::format_ranked(&ranked, &suite, &test)
+        );
     }
 
     Ok(())
 }
 
-fn cmd_profiles(raw_input: &str, test_filter: Option<&str>, json: bool, verbose: u8) -> anyhow::Result<()> {
+fn cmd_profiles(
+    raw_input: &str,
+    test_filter: Option<&str>,
+    json: bool,
+    verbose: u8,
+) -> anyhow::Result<()> {
     let spec = input::parse_input(raw_input)?;
 
     let (push, push_id, repo) = match &spec {
         types::InputSpec::Alert { alert_id } => {
-            if verbose > 0 { eprintln!("Fetching alert {}...", alert_id); }
+            if verbose > 0 {
+                eprintln!("Fetching alert {}...", alert_id);
+            }
             let summary = api::perfherder::fetch_alert_summary(*alert_id)?;
-            let first = summary.regressions.first().or(summary.improvements.first())
+            let first = summary
+                .regressions
+                .first()
+                .or(summary.improvements.first())
                 .ok_or_else(|| anyhow::anyhow!("Alert {} has no alerts", alert_id))?;
-            (first.new_push.clone(), summary.push_id, summary.repository.clone())
+            (
+                first.new_push.clone(),
+                summary.push_id,
+                summary.repository.clone(),
+            )
         }
         types::InputSpec::Push { .. } => {
-            anyhow::bail!("Pass an alert ID — need a push_id to look up jobs. \
-                           Use `perftest-brain info <url>` to find the alert ID.")
+            anyhow::bail!(
+                "Pass an alert ID — need a push_id to look up jobs. \
+                           Use `perftest-brain info <url>` to find the alert ID."
+            )
         }
         _ => anyhow::bail!("Pass an alert ID for profile lookup."),
     };
@@ -499,32 +530,45 @@ fn cmd_profiles(raw_input: &str, test_filter: Option<&str>, json: bool, verbose:
     }
 
     let jobs = api::treeherder::fetch_jobs_for_push(push_id, &repo)?;
-    let perf_jobs: Vec<_> = jobs.iter()
+    let perf_jobs: Vec<_> = jobs
+        .iter()
         .filter(|j| {
             let name = j.job_type_name.to_lowercase();
-            let is_perf = name.contains("raptor") || name.contains("browsertime") ||
-                          name.contains("awsy") || name.contains("talos") || name.contains("perftest");
+            let is_perf = name.contains("raptor")
+                || name.contains("browsertime")
+                || name.contains("awsy")
+                || name.contains("talos")
+                || name.contains("perftest");
             let is_done = j.result == "success" || j.result == "completed";
-            let matches_filter = test_filter.map(|f| name.contains(&f.to_lowercase())).unwrap_or(true);
+            let matches_filter = test_filter
+                .map(|f| name.contains(&f.to_lowercase()))
+                .unwrap_or(true);
             is_perf && is_done && matches_filter
         })
         .collect();
 
     if perf_jobs.is_empty() {
-        println!("No completed perf jobs found for push {} ({})", push.revision, repo);
+        println!(
+            "No completed perf jobs found for push {} ({})",
+            push.revision, repo
+        );
         return Ok(());
     }
 
     if verbose > 0 {
-        eprintln!("Checking {} completed perf jobs for profiles...", perf_jobs.len());
+        eprintln!(
+            "Checking {} completed perf jobs for profiles...",
+            perf_jobs.len()
+        );
     }
 
     let mut found_profiles: Vec<serde_json::Value> = Vec::new();
 
     for job in &perf_jobs {
-        if job.task_id.is_empty() { continue; }
-        let artifacts = api::taskcluster::list_artifacts_for_task(&job.task_id)
-            .unwrap_or_default();
+        if job.task_id.is_empty() {
+            continue;
+        }
+        let artifacts = api::taskcluster::list_artifacts_for_task(&job.task_id).unwrap_or_default();
         for artifact in artifacts {
             if artifact.name.contains("profile") || artifact.name.contains("profiler") {
                 found_profiles.push(serde_json::json!({
@@ -540,16 +584,28 @@ fn cmd_profiles(raw_input: &str, test_filter: Option<&str>, json: bool, verbose:
 
     if found_profiles.is_empty() {
         println!("No profiles found. Profiles are only available for completed jobs.");
-        println!("Checked {} perf jobs for push {}", perf_jobs.len(), push.revision);
+        println!(
+            "Checked {} perf jobs for push {}",
+            perf_jobs.len(),
+            push.revision
+        );
         return Ok(());
     }
 
     if json {
         println!("{}", serde_json::to_string_pretty(&found_profiles)?);
     } else {
-        println!("Found {} profile(s) for push {}:", found_profiles.len(), push.revision);
+        println!(
+            "Found {} profile(s) for push {}:",
+            found_profiles.len(),
+            push.revision
+        );
         for p in &found_profiles {
-            println!("\n  [{}] {}", p["platform"].as_str().unwrap_or(""), p["job"].as_str().unwrap_or(""));
+            println!(
+                "\n  [{}] {}",
+                p["platform"].as_str().unwrap_or(""),
+                p["job"].as_str().unwrap_or("")
+            );
             println!("  {}", p["url"].as_str().unwrap_or(""));
         }
         println!("\nLoad with: profiler-cli load <url>");

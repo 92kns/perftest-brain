@@ -271,7 +271,10 @@ fn diagnose_alert(
     }
 
     // Suggest stmo-cli for historical noise context — agents call it directly
-    let test_name = summary.regressions.first().or(summary.improvements.first())
+    let test_name = summary
+        .regressions
+        .first()
+        .or(summary.improvements.first())
         .map(|r| format!("{}/{}", r.suite, r.test));
     if let Some(ref name) = test_name {
         next_steps.push(format!(
@@ -431,7 +434,6 @@ fn compute_failure_rate(summary: &AlertSummary, verbose: bool) -> Option<Failure
         Err(_) => None,
     }
 }
-
 
 fn find_existing_bugs(summary: &AlertSummary, verbose: bool) -> Vec<ExistingBug> {
     let test_name = match summary.regressions.first().or(summary.improvements.first()) {

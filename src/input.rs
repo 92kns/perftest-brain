@@ -50,11 +50,11 @@ pub fn parse_input(raw: &str) -> Result<InputSpec> {
 
     let host = url.host_str().unwrap_or("");
 
-    if BUGZILLA_HOSTS.iter().any(|h| host == *h) {
+    if BUGZILLA_HOSTS.contains(&host) {
         return parse_bugzilla_url(&url, raw);
     }
 
-    if TREEHERDER_HOSTS.iter().any(|h| host == *h) {
+    if TREEHERDER_HOSTS.contains(&host) {
         return parse_treeherder_url(&url, raw);
     }
 

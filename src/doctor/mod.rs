@@ -82,52 +82,41 @@ pub fn run_doctor(harness: &str, checkout_root: &Path, verbose: bool) -> Result<
 }
 
 fn check_raptor(checkout_root: &Path, verbose: bool) -> Vec<CheckResult> {
-    let mut checks = Vec::new();
-
-    // Check raptor directory exists
-    checks.push(check_dir_exists(
-        "raptor directory",
-        &checkout_root.join("testing/raptor"),
-        "Clone mozilla-central and ensure testing/raptor/ is present.",
-    ));
-
-    // Check Python is available
-    checks.push(check_binary(
-        "python3",
-        "python3",
-        "--version",
-        "Install Python 3.x: https://www.python.org/downloads/",
-    ));
-
-    // Check mach is present
-    checks.push(check_file_exists(
-        "mach script",
-        &checkout_root.join("mach"),
-        "Run from inside a mozilla-central checkout.",
-    ));
-
-    // Check raptor requirements file
-    checks.push(check_file_exists(
-        "raptor requirements",
-        &checkout_root.join("testing/raptor/requirements.txt"),
-        "Raptor requirements file missing. Try: cd testing/raptor && pip install -r requirements.txt",
-    ));
-
-    // Check geckodriver
-    checks.push(check_binary(
-        "geckodriver",
-        "geckodriver",
-        "--version",
-        "Install geckodriver: https://github.com/mozilla/geckodriver/releases",
-    ));
-
-    // Check node (for browsertime)
-    checks.push(check_binary(
-        "node.js",
-        "node",
-        "--version",
-        "Install Node.js >= 18: https://nodejs.org/",
-    ));
+    let checks = vec![
+        check_dir_exists(
+            "raptor directory",
+            &checkout_root.join("testing/raptor"),
+            "Clone mozilla-central and ensure testing/raptor/ is present.",
+        ),
+        check_binary(
+            "python3",
+            "python3",
+            "--version",
+            "Install Python 3.x: https://www.python.org/downloads/",
+        ),
+        check_file_exists(
+            "mach script",
+            &checkout_root.join("mach"),
+            "Run from inside a mozilla-central checkout.",
+        ),
+        check_file_exists(
+            "raptor requirements",
+            &checkout_root.join("testing/raptor/requirements.txt"),
+            "Raptor requirements file missing. Try: cd testing/raptor && pip install -r requirements.txt",
+        ),
+        check_binary(
+            "geckodriver",
+            "geckodriver",
+            "--version",
+            "Install geckodriver: https://github.com/mozilla/geckodriver/releases",
+        ),
+        check_binary(
+            "node.js",
+            "node",
+            "--version",
+            "Install Node.js >= 18: https://nodejs.org/",
+        ),
+    ];
 
     if verbose {
         eprintln!(
@@ -144,50 +133,40 @@ fn check_raptor(checkout_root: &Path, verbose: bool) -> Vec<CheckResult> {
 }
 
 fn check_mozperftest(checkout_root: &Path, verbose: bool) -> Vec<CheckResult> {
-    let mut checks = Vec::new();
-
-    // Check mozperftest directories
-    checks.push(check_dir_exists(
-        "mozperftest directory",
-        &checkout_root.join("testing/mozperftest"),
-        "Clone mozilla-central and ensure testing/mozperftest/ is present.",
-    ));
-
-    checks.push(check_dir_exists(
-        "performance directory",
-        &checkout_root.join("testing/performance"),
-        "Clone mozilla-central and ensure testing/performance/ is present.",
-    ));
-
-    // Check Python
-    checks.push(check_binary(
-        "python3",
-        "python3",
-        "--version",
-        "Install Python 3.x: https://www.python.org/downloads/",
-    ));
-
-    // Check mach
-    checks.push(check_file_exists(
-        "mach script",
-        &checkout_root.join("mach"),
-        "Run from inside a mozilla-central checkout.",
-    ));
-
-    // Check mozperftest runner exists
-    checks.push(check_file_exists(
-        "mozperftest runner",
-        &checkout_root.join("testing/mozperftest/runner.py"),
-        "runner.py missing. Check your checkout is up to date.",
-    ));
-
-    // Check node (mozperftest also uses browsertime)
-    checks.push(check_binary(
-        "node.js",
-        "node",
-        "--version",
-        "Install Node.js >= 18: https://nodejs.org/",
-    ));
+    let checks = vec![
+        check_dir_exists(
+            "mozperftest directory",
+            &checkout_root.join("testing/mozperftest"),
+            "Clone mozilla-central and ensure testing/mozperftest/ is present.",
+        ),
+        check_dir_exists(
+            "performance directory",
+            &checkout_root.join("testing/performance"),
+            "Clone mozilla-central and ensure testing/performance/ is present.",
+        ),
+        check_binary(
+            "python3",
+            "python3",
+            "--version",
+            "Install Python 3.x: https://www.python.org/downloads/",
+        ),
+        check_file_exists(
+            "mach script",
+            &checkout_root.join("mach"),
+            "Run from inside a mozilla-central checkout.",
+        ),
+        check_file_exists(
+            "mozperftest runner",
+            &checkout_root.join("testing/mozperftest/runner.py"),
+            "runner.py missing. Check your checkout is up to date.",
+        ),
+        check_binary(
+            "node.js",
+            "node",
+            "--version",
+            "Install Node.js >= 18: https://nodejs.org/",
+        ),
+    ];
 
     if verbose {
         eprintln!(

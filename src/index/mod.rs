@@ -26,14 +26,6 @@ pub struct TestEntry {
     pub mtime: u64,
 }
 
-/// An indexed taskcluster task entry.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskEntry {
-    pub path: String,
-    pub task_id_pattern: String,
-    pub mtime: u64,
-}
-
 /// Index statistics.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IndexStats {

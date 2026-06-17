@@ -324,8 +324,8 @@ fn cmd_groom(json: bool, verbose: u8) -> anyhow::Result<()> {
     } else {
         println!("Groomed {} alerts (sorted by priority):", entries.len());
         println!(
-            "{:<8} {:<8} {:<12} {:<10} {}",
-            "Alert", "Tier", "Framework", "Score", "Test"
+            "{:<8} {:<8} {:<12} {:<10} Test",
+            "Alert", "Tier", "Framework", "Score"
         );
         println!("{}", "-".repeat(72));
         for e in &entries {

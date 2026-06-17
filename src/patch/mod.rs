@@ -126,7 +126,7 @@ fn determine_fixes(diag: &Diagnosis, checkout: &CheckoutRoot) -> Vec<manifest::M
                     {
                         fixes.push(manifest::ManifestFix::skip_if(
                             test_file,
-                            &format!("os == '{platform}'"),
+                            format!("os == '{platform}'"),
                             "intermittent failure on this platform",
                         ));
                     }

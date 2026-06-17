@@ -114,7 +114,7 @@ fn escape_json(s: &str) -> String {
 }
 
 fn run(cli: Cli) -> anyhow::Result<()> {
-    // `agents` doesn't need a checkout — handle before resolution.
+    // Commands that don't require being inside a checkout.
     if matches!(cli.command, Commands::Agents) {
         print!("{}", AGENTS_MD);
         return Ok(());

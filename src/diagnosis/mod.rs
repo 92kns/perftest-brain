@@ -134,7 +134,7 @@ pub fn diagnose(spec: &InputSpec, verbose: bool) -> Result<Diagnosis> {
                     format!("Bug {} [CaR]: {}", bug.id, short),
                     vec![
                         format!("Bug {}: {} — this is a CaR (Chromium-as-Release) failure.", bug.id, bug.summary),
-                        "Use car-mechanic-cli — it has the full CaR failure pattern database.".into(),
+                        "Use car-mechanic — it has the full CaR failure pattern database.".into(),
                         "Get a Treeherder URL from the bug, then run: car-mechanic diagnose --url '<url>'".into(),
                         "Install: cargo install --git https://github.com/92kns/car-mechanic-cli".into(),
                     ],
@@ -243,7 +243,7 @@ fn diagnose_car(alert_id: u64, suite: &str, test: &str, url: &str) -> Diagnosis 
 
     let mut next_steps = vec![format!(
         "This is a CaR (Chromium-as-Release) test: {suite}/{test}. \
-             Use car-mechanic-cli for diagnosis — it has the full CaR failure pattern database."
+             Use car-mechanic for diagnosis — it has the full CaR failure pattern database."
     )];
 
     if has_car {
@@ -256,7 +256,7 @@ fn diagnose_car(alert_id: u64, suite: &str, test: &str, url: &str) -> Diagnosis 
                     failure_rate: None,
                     findings: vec![Finding {
                         category: "car_delegated".into(),
-                        description: "Delegated to car-mechanic-cli".into(),
+                        description: "Delegated to car-mechanic".into(),
                         root_cause: out.stdout.trim().chars().take(500).collect(),
                         next_step: "See car-mechanic output above for fix steps.".into(),
                         matched_pattern: None,
@@ -265,7 +265,7 @@ fn diagnose_car(alert_id: u64, suite: &str, test: &str, url: &str) -> Diagnosis 
                         example_bug: None,
                     }],
                     existing_bugs: vec![],
-                    next_steps: vec!["See car-mechanic-cli output above.".into()],
+                    next_steps: vec!["See car-mechanic output above.".into()],
                     confidence: Confidence::Medium,
                     noise_context: None,
                 };

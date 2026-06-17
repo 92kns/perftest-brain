@@ -426,8 +426,8 @@ pub static PATTERNS: &[Pattern] = &[
         matches: &["custom-car"],
         root_cause: "This is a CaR (Chromium-as-Release) failure. \
                      perftest-brain does not have CaR-specific pattern knowledge — \
-                     car-mechanic-cli does.",
-        next_step: "Use car-mechanic-cli for this failure: \
+                     car-mechanic does.",
+        next_step: "Use car-mechanic for this failure: \
                     `car-mechanic diagnose --url <treeherder-url>`. \
                     car-mechanic encodes ~40 known CaR failure patterns with fix steps. \
                     Install: cargo install --git https://github.com/92kns/car-mechanic-cli",

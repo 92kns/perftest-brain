@@ -51,6 +51,12 @@ pub struct Finding {
     pub root_cause: String,
     pub next_step: String,
     pub matched_pattern: Option<String>,
+    /// Fix type hint for patch generation.
+    pub fix_type: String,
+    /// Platforms where this failure commonly occurs. Empty = all.
+    pub platform_hints: Vec<String>,
+    /// Example Bugzilla bug demonstrating this pattern.
+    pub example_bug: Option<u64>,
 }
 
 /// An existing Bugzilla bug for this failure.
@@ -319,19 +325,26 @@ fn diagnose_from_log(log_text: &str, input_summary: &str) -> Diagnosis {
     }
 }
 
+fn pattern_to_finding(p: &patterns::Pattern) -> Finding {
+    Finding {
+        category: p.category.into(),
+        description: p.description.into(),
+        root_cause: p.root_cause.into(),
+        next_step: p.next_step.into(),
+        matched_pattern: Some(p.description.into()),
+        fix_type: format!("{:?}", p.fix_type),
+        platform_hints: p.platform_hints.iter().map(|s| s.to_string()).collect(),
+        example_bug: p.example_bug,
+    }
+}
+
 /// Match patterns against actual job log text.
 fn find_pattern_matches_in_log(log_text: &str) -> Vec<Finding> {
     let lower = log_text.to_lowercase();
     patterns::PATTERNS
         .iter()
         .filter(|p| p.matches.iter().all(|m| lower.contains(&m.to_lowercase())))
-        .map(|p| Finding {
-            category: p.category.into(),
-            description: p.description.into(),
-            root_cause: p.root_cause.into(),
-            next_step: p.next_step.into(),
-            matched_pattern: Some(p.description.into()),
-        })
+        .map(pattern_to_finding)
         .collect()
 }
 
@@ -370,13 +383,7 @@ fn find_pattern_matches_by_name(summary: &AlertSummary) -> Vec<Finding> {
                 .iter()
                 .all(|m| combined.contains(&m.to_lowercase()))
         })
-        .map(|p| Finding {
-            category: p.category.into(),
-            description: p.description.into(),
-            root_cause: p.root_cause.into(),
-            next_step: p.next_step.into(),
-            matched_pattern: Some(p.description.into()),
-        })
+        .map(pattern_to_finding)
         .collect()
 }
 

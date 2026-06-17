@@ -129,6 +129,49 @@ perftest-brain agents | <your-ai-tool>
 
 Auto-detects the Firefox checkout root by walking up from CWD, requiring both a `mach` file AND `.hg`/`.git` (both required — any git repo does not qualify). Override with `--checkout-path` or `PERFTEST_BRAIN_CHECKOUT` env var.
 
+## Failure Pattern Knowledge Base
+
+The `diagnose` command matches against a corpus of real failure patterns grounded in:
+- Treeherder failures API (autoland, 6 weeks of data, top recurring bugs)
+- Bugzilla Testing/Raptor and Testing/mozperftest intermittent-failure bug corpus
+- Live Taskcluster job logs from failed tasks
+
+Each pattern includes:
+- `category` — failure type (browser_crash, timeout, no_data, infrastructure, etc.)
+- `fix_type` — what kind of fix is typically needed (Retrigger, RequestLongerTimeout, SkipIf, FileCrashBug, InfraReport, CodeFix)
+- `platform_hints` — platforms where this pattern is most common
+- `example_bug` — a representative Bugzilla bug ID
+
+### High-frequency patterns (real data, last 6 weeks on autoland)
+
+| Bug | Failures/week | Pattern | Fix type |
+|-----|---------------|---------|----------|
+| [1809667](https://bugzilla.mozilla.org/show_bug.cgi?id=1809667) | 815 | `Task aborted - max run time exceeded` | Retrigger / InfraReport |
+| [1358898](https://bugzilla.mozilla.org/show_bug.cgi?id=1358898) | 836 | `RunWatchdog` — Firefox kills itself on shutdown | Retrigger |
+| [2038441](https://bugzilla.mozilla.org/show_bug.cgi?id=2038441) | 291 | Android perftest `[taskcluster:error] Aborting task` (hg clone stuck) | InfraReport |
+| [1777373](https://bugzilla.mozilla.org/show_bug.cgi?id=1777373) | 328 | `MutexImpl::mutexLock: pthread_mutex_lock failed` | Retrigger |
+| [1934169](https://bugzilla.mozilla.org/show_bug.cgi?id=1934169) | ~231 | `TypeError: Cannot read properties of undefined (reading 'samples')` on Android | InfraReport |
+| [1635752](https://bugzilla.mozilla.org/show_bug.cgi?id=1635752) | – | `BrowserError: Could not start the browser with 3 tries` | Retrigger / doctor |
+
+### Diagnosis output fields
+
+`diagnose --json` returns findings with:
+```json
+{
+  "category": "timeout",
+  "fix_type": "RequestLongerTimeout",
+  "platform_hints": [],
+  "example_bug": 1641648,
+  "next_step": "Add requestLongerTimeout to the test manifest..."
+}
+```
+
+Use `fix_type` to decide what `patch` will do:
+- `RequestLongerTimeout` → `patch` adds `requestLongerTimeout` to the manifest
+- `SkipIf` → `patch` adds a `skip-if` condition
+- `Retrigger` / `InfraReport` → no patch; retrigger or file infra bug
+- `FileCrashBug` → `patch` won't help; open a browser crash bug
+
 ## External Tools
 
 Calls these when available; gracefully degrades when absent:

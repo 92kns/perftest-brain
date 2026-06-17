@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn empty_env_is_ignored() {
-        let tmp = tempdir().unwrap();
+        let _tmp = tempdir().unwrap();
         // empty env string → falls through to walk-up, which fails in a bare tempdir
         let err = resolve(None, Some(String::new()));
         // should not error saying the empty string is not a checkout

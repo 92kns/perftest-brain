@@ -110,6 +110,28 @@ perftest-brain info --json 44793
 
 Resolves any supported input to a structured summary without full diagnosis.
 
+### `commits <input>` — rank commits in a regression window by relevance
+
+```
+perftest-brain commits 44793
+perftest-brain commits 'https://perf.compare.firefox.com/?baseRev=abc&newRev=def'
+perftest-brain commits --json 44793
+```
+
+Fetches commits between the base and new push of a regression, ranks them by how much they touch code areas relevant to the failing test. Absorbed from `perf-alert-cli commits`.
+
+Output: commits ranked `[SUSPECT]` (high relevance) or `[  low  ]`, with touched files and matched code areas. Top suspect named at the end.
+
+### `profiles <input>` — list available Gecko profiler profiles
+
+```
+perftest-brain profiles 44793
+perftest-brain profiles --test speedometer3 44793
+perftest-brain profiles --json 44793
+```
+
+Lists Gecko profiler `.zip` artifacts available for the regressed push. Use `profiler-cli load <url>` to open them. Absorbed from `perf-alert-cli profiles`.
+
 ### `agents` — print this guide to stdout
 
 ```
@@ -178,7 +200,7 @@ Calls these when available; gracefully degrades when absent:
 
 | Tool | Used by | Notes |
 |------|---------|-------|
-| `stmo-cli` | `diagnose` | Historical noise context for signal quality |
+| `stmo-cli` | Agent-driven | Query STMO directly: `stmo-cli execute <query-id> --format json --param test=<name>`. The tool surfaces the right query to run; agents execute it themselves. |
 | `searchfox-cli` | `diagnose`, `update` | Code search fallback when local index is empty |
 | `perf-alert-cli` | — | Companion tool for regression culprit investigation |
 | `git` / `hg` / `jj` | `patch` | VCS dirty-state check before patching |

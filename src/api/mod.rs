@@ -1,5 +1,6 @@
 pub mod bugzilla;
 pub mod perfherder;
+pub mod pushlog;
 pub mod taskcluster;
 pub mod treeherder;
 

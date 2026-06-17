@@ -204,7 +204,6 @@ fn diagnose_alert(
         .map(|r| logs::treeherder_url(&r.new_push.revision, &r.new_push.repo))
         .and_then(|url| logs::fetch_failure_logs(&url).ok());
 
-    let noise_context = fetch_noise_context(&summary, verbose);
     let existing_bugs = find_existing_bugs(&summary, verbose);
     let failure_rate = compute_failure_rate(&summary, verbose);
 
@@ -264,11 +263,22 @@ fn diagnose_alert(
     }
 
     if matches!(signal_type, SignalType::SustainedRegression) {
-        next_steps.push(
+        next_steps.push(format!(
             "This looks like a SUSTAINED REGRESSION (Perfherder t-test verdict). \
-             Use 'perf-alert-cli info' to investigate the culprit commit."
-                .into(),
-        );
+             Run `perftest-brain commits {}` to rank commits by relevance.",
+            alert_id
+        ));
+    }
+
+    // Suggest stmo-cli for historical noise context — agents call it directly
+    let test_name = summary.regressions.first().or(summary.improvements.first())
+        .map(|r| format!("{}/{}", r.suite, r.test));
+    if let Some(ref name) = test_name {
+        next_steps.push(format!(
+            "For historical noise context: run `stmo-cli execute <query-id> --format json --param test={}` \
+             (replace <query-id> with a STMO query that queries Perfherder signal history)",
+            name
+        ));
     }
 
     Ok(Diagnosis {
@@ -279,7 +289,7 @@ fn diagnose_alert(
         existing_bugs,
         next_steps,
         confidence,
-        noise_context,
+        noise_context: None,
     })
 }
 
@@ -422,29 +432,6 @@ fn compute_failure_rate(summary: &AlertSummary, verbose: bool) -> Option<Failure
     }
 }
 
-fn fetch_noise_context(summary: &AlertSummary, verbose: bool) -> Option<String> {
-    // Attempt stmo-cli query for historical noise baseline.
-    // Falls back gracefully if stmo-cli is not available.
-    use crate::tools::{CliTool, Tool};
-
-    let stmo = CliTool::new("stmo-cli");
-    if !stmo.check_available() {
-        if verbose {
-            eprintln!("stmo-cli not found on PATH — skipping noise context");
-        }
-        return None;
-    }
-
-    let test_name = summary
-        .regressions
-        .first()
-        .map(|r| format!("{}/{}", r.suite, r.test))?;
-
-    match stmo.run(&["query", "--test", &test_name, "--json"]) {
-        Ok(out) if out.exit_code == 0 => Some(out.stdout.trim().to_owned()),
-        _ => None,
-    }
-}
 
 fn find_existing_bugs(summary: &AlertSummary, verbose: bool) -> Vec<ExistingBug> {
     let test_name = match summary.regressions.first().or(summary.improvements.first()) {

@@ -1,6 +1,6 @@
 # perftest-brain
 
-Routes Firefox performance failure signals — Perfherder alerts, Treeherder job URLs, test names — through diagnosis, patch generation, and sheriff triage. Encodes harness-specific knowledge for raptor, mozperftest, and browsertime, and integrates with treeherder-cli, stmo-cli, and searchfox-cli already in your Firefox checkout.
+Routes Firefox performance failure signals — Perfherder alerts, Treeherder job URLs, test names — through diagnosis, culprit commit ranking, patch generation, and sheriff triage. Encodes harness-specific knowledge for raptor, mozperftest, and browsertime. Absorbs the functionality of `perf-alert-cli`.
 
 Designed for use by both engineers and AI agents.
 
@@ -92,6 +92,24 @@ perftest-brain update
 
 Walks `testing/raptor/`, `testing/mozperftest/`, `testing/performance/`, and `taskcluster/` and writes an incremental SQLite index. Used by `diagnose` for fast test lookups; falls back to `searchfox-cli` when the index is empty.
 
+### `commits <input>` — rank commits in the regression window
+
+```
+perftest-brain commits 44793
+perftest-brain commits 'https://perf.compare.firefox.com/?baseRev=abc&newRev=def'
+```
+
+Fetches commits between the base and new push of a regression, ranks them by relevance to the failing test. Outputs `[SUSPECT]` markers, touched files, and matched code areas. Absorbed from `perf-alert-cli commits`.
+
+### `profiles <input>` — list available Gecko profiler profiles
+
+```
+perftest-brain profiles 44793
+perftest-brain profiles --test speedometer3 44793
+```
+
+Lists Gecko profiler profiles available for the regressed push via Taskcluster artifacts. Load with `profiler-cli load <url>`. Absorbed from `perf-alert-cli profiles`.
+
 ### `info` — inspect a signal
 
 ```
@@ -126,9 +144,9 @@ All commands that take `<input>` accept:
 
 | Tool | Required | Notes |
 |------|----------|-------|
-| `stmo-cli` | Optional | Historical noise context for `diagnose` |
-| `searchfox-cli` | Optional | Code search fallback for `update`/`diagnose` |
-| `perf-alert-cli` | Optional | Companion tool — regression culprit investigation |
+| `stmo-cli` | Optional | Historical noise queries — agents call it directly via `stmo-cli execute` |
+| `searchfox-cli` | Optional | Code search fallback for `reindex`/`diagnose` |
+| `profiler-cli` | Optional | Load profiles surfaced by `perftest-brain profiles` |
 | `git` / `hg` / `jj` | Optional | VCS dirty-state check for `patch` |
 
 All external tools degrade gracefully when not found.

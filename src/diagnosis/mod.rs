@@ -93,7 +93,10 @@ pub fn diagnose(spec: &InputSpec, verbose: bool) -> Result<Diagnosis> {
                     if *alert_id > 999_999 {
                         // Looks like a Bugzilla bug ID — retry as Bug input
                         if verbose {
-                            eprintln!("Alert {} not found on Perfherder — retrying as Bugzilla bug ID...", alert_id);
+                            eprintln!(
+                                "Alert {} not found on Perfherder — retrying as Bugzilla bug ID...",
+                                alert_id
+                            );
                         }
                         let bug_spec = InputSpec::Bug { bug_id: *alert_id };
                         diagnose(&bug_spec, verbose)
@@ -122,7 +125,8 @@ pub fn diagnose(spec: &InputSpec, verbose: bool) -> Result<Diagnosis> {
             // Detect CaR from bug summary before hitting Perfherder.
             // CaR bugs look like: "Perma [custom-car] subprocess.CalledProcessError..."
             let summary_lower = bug.summary.to_lowercase();
-            if summary_lower.contains("custom-car") || summary_lower.contains("[car]")
+            if summary_lower.contains("custom-car")
+                || summary_lower.contains("[car]")
                 || summary_lower.contains("chromium-as-release")
             {
                 let short = bug.summary.chars().take(80).collect::<String>();

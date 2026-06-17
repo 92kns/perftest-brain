@@ -72,6 +72,9 @@ pub struct AlertResult {
     pub profile_url: Option<String>,
     pub base_push: Push,
     pub new_push: Push,
+    /// Taskcluster task ID for the new (regressing) push — used for direct artifact lookup.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
 }
 
 /// A Treeherder job row (normalised from the column-indexed response).

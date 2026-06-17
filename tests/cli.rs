@@ -26,10 +26,11 @@ fn version_succeeds() {
 #[test]
 fn outside_checkout_exits_nonzero() {
     let tmp = tempdir().unwrap();
+    // diagnose requires a checkout; info does not
     cmd()
         .current_dir(tmp.path())
         .env_remove("PERFTEST_BRAIN_CHECKOUT")
-        .arg("info")
+        .args(["diagnose", "12345"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Not in a Firefox checkout"));
@@ -41,7 +42,7 @@ fn outside_checkout_json_flag_emits_json_error() {
     cmd()
         .current_dir(tmp.path())
         .env_remove("PERFTEST_BRAIN_CHECKOUT")
-        .args(["--json", "info"])
+        .args(["--json", "diagnose", "12345"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("\"error\""))

@@ -136,40 +136,45 @@ fn escape_json(s: &str) -> String {
 }
 
 fn run(cli: Cli) -> anyhow::Result<()> {
-    // Commands that don't need a checkout at all.
+    let json = cli.json;
+    let verbose = cli.verbose;
+
+    // Resolve checkout only for commands that need it.
+    let needs_checkout = matches!(
+        cli.command,
+        Commands::Diagnose { .. }
+            | Commands::Patch { .. }
+            | Commands::Sheriff { .. }
+            | Commands::Groom
+            | Commands::Doctor { .. }
+            | Commands::Reindex
+    );
+
+    let checkout = if needs_checkout {
+        let co = checkout::resolve(
+            cli.checkout_path.as_deref(),
+            std::env::var("PERFTEST_BRAIN_CHECKOUT").ok(),
+        )?;
+        if verbose > 0 {
+            eprintln!("checkout: {} ({:?})", co.path.display(), co.vcs);
+        }
+        Some(co)
+    } else {
+        None
+    };
+
     match cli.command {
-        Commands::Agents => {
-            print!("{}", AGENTS_MD);
-            return Ok(());
-        }
-        Commands::Update => return cmd_self_update(),
-        _ => {}
-    }
-
-    let checkout = checkout::resolve(
-        cli.checkout_path.as_deref(),
-        std::env::var("PERFTEST_BRAIN_CHECKOUT").ok(),
-    )?;
-
-    if cli.verbose > 0 {
-        eprintln!("checkout: {} ({:?})", checkout.path.display(), checkout.vcs);
-    }
-
-    match cli.command {
-        Commands::Info { input } => cmd_info(input.as_deref(), cli.json),
-        Commands::Diagnose { input } => cmd_diagnose(input.as_deref(), cli.json, cli.verbose),
-        Commands::Patch { input } => cmd_patch(input.as_deref(), &checkout, cli.json, cli.verbose),
-        Commands::Sheriff { input } => cmd_sheriff(input.as_deref(), cli.json, cli.verbose),
-        Commands::Groom => cmd_groom(cli.json, cli.verbose),
-        Commands::Doctor { harness } => {
-            cmd_doctor(harness.as_deref(), &checkout, cli.json, cli.verbose)
-        }
-        Commands::Reindex => cmd_reindex(&checkout, cli.json, cli.verbose),
-        Commands::Commits { input } => cmd_commits(&input, cli.json, cli.verbose),
-        Commands::Profiles { input, test } => {
-            cmd_profiles(&input, test.as_deref(), cli.json, cli.verbose)
-        }
-        Commands::Agents | Commands::Update => unreachable!("handled above"),
+        Commands::Agents => { print!("{}", AGENTS_MD); Ok(()) }
+        Commands::Update => cmd_self_update(),
+        Commands::Info { input } => cmd_info(input.as_deref(), json),
+        Commands::Commits { input } => cmd_commits(&input, json, verbose),
+        Commands::Profiles { input, test } => cmd_profiles(&input, test.as_deref(), json, verbose),
+        Commands::Diagnose { input } => cmd_diagnose(input.as_deref(), json, verbose),
+        Commands::Patch { input } => cmd_patch(input.as_deref(), checkout.as_ref().unwrap(), json, verbose),
+        Commands::Sheriff { input } => cmd_sheriff(input.as_deref(), json, verbose),
+        Commands::Groom => cmd_groom(json, verbose),
+        Commands::Doctor { harness } => cmd_doctor(harness.as_deref(), checkout.as_ref().unwrap(), json, verbose),
+        Commands::Reindex => cmd_reindex(checkout.as_ref().unwrap(), json, verbose),
     }
 }
 
@@ -499,82 +504,57 @@ fn cmd_profiles(
 ) -> anyhow::Result<()> {
     let spec = input::parse_input(raw_input)?;
 
-    let (push, push_id, repo) = match &spec {
-        types::InputSpec::Alert { alert_id } => {
-            if verbose > 0 {
-                eprintln!("Fetching alert {}...", alert_id);
-            }
-            let summary = api::perfherder::fetch_alert_summary(*alert_id)?;
-            let first = summary
-                .regressions
-                .first()
-                .or(summary.improvements.first())
-                .ok_or_else(|| anyhow::anyhow!("Alert {} has no alerts", alert_id))?;
-            (
-                first.new_push.clone(),
-                summary.push_id,
-                summary.repository.clone(),
-            )
-        }
-        types::InputSpec::Push { .. } => {
-            anyhow::bail!(
-                "Pass an alert ID — need a push_id to look up jobs. \
-                           Use `perftest-brain info <url>` to find the alert ID."
-            )
-        }
-        _ => anyhow::bail!("Pass an alert ID for profile lookup."),
+    let alert_id = match &spec {
+        types::InputSpec::Alert { alert_id } => *alert_id,
+        _ => anyhow::bail!(
+            "Pass an alert ID for profile lookup. \
+             Use `perftest-brain info <url>` to find the alert ID from a Treeherder URL."
+        ),
     };
 
-    if verbose > 0 {
-        eprintln!("Fetching jobs for push_id {}...", push_id);
-    }
+    if verbose > 0 { eprintln!("Fetching alert {}...", alert_id); }
+    let summary = api::perfherder::fetch_alert_summary(alert_id)?;
 
-    let jobs = api::treeherder::fetch_jobs_for_push(push_id, &repo)?;
-    let perf_jobs: Vec<_> = jobs
-        .iter()
-        .filter(|j| {
-            let name = j.job_type_name.to_lowercase();
-            let is_perf = name.contains("raptor")
-                || name.contains("browsertime")
-                || name.contains("awsy")
-                || name.contains("talos")
-                || name.contains("perftest");
-            let is_done = j.result == "success" || j.result == "completed";
-            let matches_filter = test_filter
-                .map(|f| name.contains(&f.to_lowercase()))
-                .unwrap_or(true);
-            is_perf && is_done && matches_filter
+    let all_alerts: Vec<_> = summary.regressions.iter()
+        .chain(summary.improvements.iter())
+        .filter(|r| {
+            test_filter.map(|f| r.test.to_lowercase().contains(&f.to_lowercase())).unwrap_or(true)
         })
         .collect();
 
-    if perf_jobs.is_empty() {
-        println!(
-            "No completed perf jobs found for push {} ({})",
-            push.revision, repo
-        );
+    if all_alerts.is_empty() {
+        println!("No alerts found for alert summary {}", alert_id);
+        return Ok(());
+    }
+
+    // Collect task IDs directly from alert metadata — no jobs API call needed.
+    // Dedup by task_id since multiple alerts may share the same task.
+    let mut seen = std::collections::HashSet::new();
+    let task_ids: Vec<(String, String, String)> = all_alerts.iter()
+        .filter_map(|r| r.task_id.as_ref().map(|t| (t.clone(), r.test.clone(), r.platform.clone())))
+        .filter(|(t, _, _)| seen.insert(t.clone()))
+        .collect();
+
+    if task_ids.is_empty() {
+        println!("Alert {} has no Taskcluster metadata — jobs may still be running.", alert_id);
+        println!("Profiles are only available for completed jobs.");
         return Ok(());
     }
 
     if verbose > 0 {
-        eprintln!(
-            "Checking {} completed perf jobs for profiles...",
-            perf_jobs.len()
-        );
+        eprintln!("Checking {} task(s) for profile artifacts...", task_ids.len());
     }
 
     let mut found_profiles: Vec<serde_json::Value> = Vec::new();
 
-    for job in &perf_jobs {
-        if job.task_id.is_empty() {
-            continue;
-        }
-        let artifacts = api::taskcluster::list_artifacts_for_task(&job.task_id).unwrap_or_default();
+    for (task_id, test, platform) in &task_ids {
+        let artifacts = api::taskcluster::list_artifacts_for_task(task_id).unwrap_or_default();
         for artifact in artifacts {
             if artifact.name.contains("profile") || artifact.name.contains("profiler") {
                 found_profiles.push(serde_json::json!({
-                    "job": job.job_type_name,
-                    "platform": job.platform,
-                    "task_id": job.task_id,
+                    "test": test,
+                    "platform": platform,
+                    "task_id": task_id,
                     "artifact": artifact.name,
                     "url": artifact.url,
                 }));
@@ -583,32 +563,23 @@ fn cmd_profiles(
     }
 
     if found_profiles.is_empty() {
-        println!("No profiles found. Profiles are only available for completed jobs.");
-        println!(
-            "Checked {} perf jobs for push {}",
-            perf_jobs.len(),
-            push.revision
-        );
+        println!("No profiles found for alert {}.", alert_id);
+        println!("Profiles require the job to have run with --gecko-profile flag.");
+        println!("Checked {} task(s).", task_ids.len());
         return Ok(());
     }
 
     if json {
         println!("{}", serde_json::to_string_pretty(&found_profiles)?);
     } else {
-        println!(
-            "Found {} profile(s) for push {}:",
-            found_profiles.len(),
-            push.revision
-        );
+        println!("Found {} profile(s) for alert {}:", found_profiles.len(), alert_id);
         for p in &found_profiles {
-            println!(
-                "\n  [{}] {}",
-                p["platform"].as_str().unwrap_or(""),
-                p["job"].as_str().unwrap_or("")
-            );
+            println!("\n  [{}] {}", p["platform"].as_str().unwrap_or(""), p["test"].as_str().unwrap_or(""));
             println!("  {}", p["url"].as_str().unwrap_or(""));
         }
-        println!("\nLoad with: profiler-cli load <url>");
+        println!("\nEngineers: load with profiler-cli (ships with your Firefox checkout):");
+        println!("  profiler-cli load <url>");
+        println!("\nAI agents: run `profiler-cli load <url>` directly then analyze the output.");
     }
 
     Ok(())

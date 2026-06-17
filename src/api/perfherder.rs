@@ -53,6 +53,12 @@ struct PhSeriesSignature {
 }
 
 #[derive(Deserialize)]
+struct PhTaskclusterMeta {
+    #[serde(default)]
+    task_id: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct PhAlert {
     status: u64,
     is_regression: bool,
@@ -67,6 +73,8 @@ struct PhAlert {
     profile_url: Option<String>,
     #[serde(default)]
     prev_profile_url: Option<String>,
+    #[serde(default)]
+    taskcluster_metadata: Option<PhTaskclusterMeta>,
 }
 
 #[derive(Deserialize)]
@@ -140,6 +148,7 @@ fn convert_summary(raw: PhAlertSummary) -> AlertSummary {
             profile_url: a.profile_url.clone(),
             base_push: base_push.clone(),
             new_push: new_push.clone(),
+            task_id: a.taskcluster_metadata.as_ref().and_then(|tc| tc.task_id.clone()),
         })
         .collect();
 

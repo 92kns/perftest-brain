@@ -96,12 +96,32 @@ pub static PATTERNS: &[Pattern] = &[
         description: "Raptor test timed out loading the test page",
         matches: &["timed out loading test page"],
         root_cause: "Raptor test exceeded page load timeout. Common for pageload (tp6) tests \
-                     on slow network workers or when mitmproxy replay is slow.",
-        next_step: "Increase the test timeout in the raptor manifest (requestLongerTimeout). \
-                    Check mitmproxy recording freshness.",
+                     on slow network workers or when mitmproxy replay is slow. \
+                     If this follows a mitmproxy version upgrade, the recording needs to be \
+                     re-recorded with the new version (Bug 1513467: fix was 're-record for mitm4').",
+        next_step: "First: retrigger to confirm intermittency. \
+                    If it persists: add `requestLongerTimeout` to the raptor .toml manifest. \
+                    If it started after a mitmproxy upgrade: re-record with `./mach raptor --record`. \
+                    If it fails >30x/week: disable with `skip-if = true` (Bug 1513467 pattern).",
         fix_type: FixType::RequestLongerTimeout,
         platform_hints: &[],
-        example_bug: Some(1491804),
+        example_bug: Some(1513467),
+    },
+
+    // ── Mitmproxy: recording stale after version upgrade ─────────────────────
+    Pattern {
+        category: "mitmproxy",
+        description: "Mitmproxy recording is stale or incompatible with current mitmproxy version",
+        matches: &["mitmproxy", "timed out loading test page"],
+        root_cause: "The mitmproxy recording was created with an older version of mitmproxy. \
+                     After a mitmproxy version upgrade the replay may fail silently, causing \
+                     page load timeouts. Real fix: re-record the test (Bug 1513467).",
+        next_step: "Re-record the test with the current mitmproxy version: \
+                    `./mach raptor --record --test <test-name>`. \
+                    Check `testing/raptor/raptor/playback/mitmproxy*.py` for the current version.",
+        fix_type: FixType::CodeFix,
+        platform_hints: &[],
+        example_bug: Some(1513467),
     },
 
     // ── Browsertime: NoSuchWindow after timeout ───────────────────────────────
@@ -410,6 +430,108 @@ pub static PATTERNS: &[Pattern] = &[
         fix_type: FixType::Retrigger,
         platform_hints: &[],
         example_bug: None,
+    },
+
+    // ── mozperftest: NodeException (perma failure pattern) ────────────────────
+    // From Bugs 1678588, 1703489: Perma NodeException failures fixed by code changes
+    Pattern {
+        category: "node_exception",
+        description: "mozperftest NodeException: 1 — Node.js runner exited with error code 1",
+        matches: &["mozperftest.test.browsertime.runner.NodeException: 1"],
+        root_cause: "The mozperftest Node.js runner exited with code 1 (generic failure). \
+                     If perma (not intermittent): likely a test change broke the script. \
+                     If intermittent: device connectivity or transient Node crash.",
+        next_step: "Check if this started after a test or harness change (Bug 1703489: \
+                    fixed by Bug 1703070 harness fix). Retrigger once to confirm. \
+                    If perma, look at the test script for a breaking change.",
+        fix_type: FixType::CodeFix,
+        platform_hints: &[],
+        example_bug: Some(1703489),
+    },
+
+    // ── mozperftest: ModuleNotFoundError ──────────────────────────────────────
+    // From Bugs 1675038, 1710578, 1717786: Python module missing after dependency change
+    Pattern {
+        category: "infrastructure",
+        description: "Python ModuleNotFoundError in mozperftest — missing dependency",
+        matches: &["ModuleNotFoundError: No module named"],
+        root_cause: "A required Python module is missing from the test environment. \
+                     Usually caused by a requirements.txt change not being synced, \
+                     or a virtualenv not being rebuilt after a dependency update.",
+        next_step: "This is typically a code fix: update requirements.txt or the vendored \
+                    dependency. Check if a recent patch changed perftest dependencies without \
+                    updating the test environment setup.",
+        fix_type: FixType::CodeFix,
+        platform_hints: &[],
+        example_bug: Some(1710578),
+    },
+
+    // ── mozperftest: SSL certificate error ────────────────────────────────────
+    // From Bug 1692467: controlled perftest ssl.SSLCertVerificationError
+    Pattern {
+        category: "infrastructure",
+        description: "SSL certificate verification failed in controlled perftest",
+        matches: &["SSLCertVerificationError", "CERTIFICATE_VERIFY_FAILED"],
+        root_cause: "HTTPS connection failed due to certificate verification error. \
+                     In controlled perftests this usually means the test server cert \
+                     is self-signed and not trusted, or the cert expired.",
+        next_step: "Check the controlled test server setup. \
+                    If this is a known issue (Bug 1692467 pattern), consider disabling \
+                    the affected test until the cert is fixed.",
+        fix_type: FixType::CodeFix,
+        platform_hints: &[],
+        example_bug: Some(1692467),
+    },
+
+    // ── Perma failure: disable-recommended ───────────────────────────────────
+    // From stockwell annotations on many bugs: [stockwell disable-recommended]
+    Pattern {
+        category: "perma_failure",
+        description: "Test is perma-failing and marked disable-recommended by Stockwell",
+        matches: &["stockwell disable-recommended"],
+        root_cause: "Stockwell (the automated intermittent tracking system) has flagged this \
+                     test as failing so frequently that it should be disabled. \
+                     The test is hurting CI signal quality.",
+        next_step: "Disable the test by adding `disabled = intermittent` to the raptor manifest, \
+                    or add `skip-if = true` with a bug comment. \
+                    File a bug (or use the existing one) tracking the underlying failure.",
+        fix_type: FixType::SkipIf,
+        platform_hints: &[],
+        example_bug: None,
+    },
+
+    // ── Raptor: JavaScript error in addon during test ─────────────────────────
+    // From Bug 1501040: Perma beta raptor-firefox-tp6 JavaScript error in XPIProvider
+    Pattern {
+        category: "node_exception",
+        description: "JavaScript error in Firefox extension/addon during raptor test",
+        matches: &["raptor", "JavaScript error:", "resource://"],
+        root_cause: "A Firefox internal JavaScript error occurred during the test, \
+                     likely in an extension or addon (XPIProvider, etc.). \
+                     Can indicate a Firefox regression or an incompatible addon version.",
+        next_step: "Check if this started after a Firefox change to the addon system. \
+                    Retrigger to confirm intermittency. If perma, \
+                    use `perf-alert-cli` to find the culprit commit.",
+        fix_type: FixType::CodeFix,
+        platform_hints: &[],
+        example_bug: Some(1501040),
+    },
+
+    // ── mozperftest: JSONDecodeError in result processing ─────────────────────
+    // From Bug 1767567: json.decoder.JSONDecodeError: Expecting value: line 1
+    Pattern {
+        category: "no_data",
+        description: "mozperftest result processing failed: JSONDecodeError",
+        matches: &["JSONDecodeError: Expecting value"],
+        root_cause: "The test produced invalid or empty JSON output. \
+                     Usually caused by the test process exiting before writing results, \
+                     or a result file being empty/truncated.",
+        next_step: "Check what the test process wrote to the result file. \
+                    Retrigger once. If consistent, the test script may need a fix \
+                    to handle error cases before writing results.",
+        fix_type: FixType::CodeFix,
+        platform_hints: &[],
+        example_bug: Some(1767567),
     },
 ];
 

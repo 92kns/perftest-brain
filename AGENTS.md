@@ -194,6 +194,27 @@ Use `fix_type` to decide what `patch` will do:
 - `Retrigger` / `InfraReport` → no patch; retrigger or file infra bug
 - `FileCrashBug` → `patch` won't help; open a browser crash bug
 
+## Companion Tools
+
+### car-mechanic-cli — CaR build failures
+
+CaR (Chromium-as-Release) failures are **out of scope for perftest-brain**. If you see any of these signals, hand off to `car-mechanic-cli`:
+
+- Job name contains `custom-car`, `toolchain-linux64-custom-car`, or similar
+- Failure text contains `custom-car`, `[custom-car]`, or `chromium-as-release`
+- Bug summary contains `[custom-car]`
+
+```
+car-mechanic diagnose --url '<treeherder-job-url>'
+car-mechanic diagnose --url '<treeherder-job-url>' --json
+```
+
+perftest-brain will detect CaR signals and emit this hint automatically. car-mechanic encodes ~40 known CaR failure patterns with ordered fix steps.
+
+Install: `cargo install --git https://github.com/92kns/car-mechanic-cli`
+
+---
+
 ## External Tools
 
 Calls these when available; gracefully degrades when absent:

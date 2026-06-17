@@ -84,7 +84,31 @@ pub enum Confidence {
 /// when there is not enough data (caller should surface the retrigger recommendation).
 pub fn diagnose(spec: &InputSpec, verbose: bool) -> Result<Diagnosis> {
     match spec {
-        InputSpec::Alert { alert_id } => diagnose_alert(*alert_id, None, verbose),
+        InputSpec::Alert { alert_id } => {
+            // Try Perfherder first. If it 404s, the number might be a Bugzilla bug ID —
+            // Perfherder alert IDs are typically 5 digits (~50000s), Bugzilla IDs are 7+ digits.
+            match diagnose_alert(*alert_id, None, verbose) {
+                Ok(d) => Ok(d),
+                Err(e) if e.to_string().contains("404") => {
+                    if *alert_id > 999_999 {
+                        // Looks like a Bugzilla bug ID — retry as Bug input
+                        if verbose {
+                            eprintln!("Alert {} not found on Perfherder — retrying as Bugzilla bug ID...", alert_id);
+                        }
+                        let bug_spec = InputSpec::Bug { bug_id: *alert_id };
+                        diagnose(&bug_spec, verbose)
+                    } else {
+                        Err(e.context(format!(
+                            "Alert {} not found on Perfherder. \
+                             If this is a Bugzilla bug number, pass the full URL: \
+                             https://bugzilla.mozilla.org/show_bug.cgi?id={}",
+                            alert_id, alert_id
+                        )))
+                    }
+                }
+                Err(e) => Err(e),
+            }
+        }
         InputSpec::Push { push } => {
             // Fetch logs directly from Treeherder via treeherder-cli
             let url = logs::treeherder_url(&push.revision, &push.repo);
@@ -94,6 +118,25 @@ pub fn diagnose(spec: &InputSpec, verbose: bool) -> Result<Diagnosis> {
         }
         InputSpec::Bug { bug_id } => {
             let bug = api::bugzilla::fetch_bug(*bug_id)?;
+
+            // Detect CaR from bug summary before hitting Perfherder.
+            // CaR bugs look like: "Perma [custom-car] subprocess.CalledProcessError..."
+            let summary_lower = bug.summary.to_lowercase();
+            if summary_lower.contains("custom-car") || summary_lower.contains("[car]")
+                || summary_lower.contains("chromium-as-release")
+            {
+                let short = bug.summary.chars().take(80).collect::<String>();
+                return Ok(insufficient_diagnosis_with_steps(
+                    format!("Bug {} [CaR]: {}", bug.id, short),
+                    vec![
+                        format!("Bug {}: {} — this is a CaR (Chromium-as-Release) failure.", bug.id, bug.summary),
+                        "Use car-mechanic-cli — it has the full CaR failure pattern database.".into(),
+                        "Get a Treeherder URL from the bug, then run: car-mechanic diagnose --url '<url>'".into(),
+                        "Install: cargo install --git https://github.com/92kns/car-mechanic-cli".into(),
+                    ],
+                ));
+            }
+
             let alerts =
                 api::perfherder::fetch_alert_summaries_for_bug(*bug_id).unwrap_or_default();
             if let Some(first) = alerts.first() {

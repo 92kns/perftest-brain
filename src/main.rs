@@ -164,16 +164,26 @@ fn run(cli: Cli) -> anyhow::Result<()> {
     };
 
     match cli.command {
-        Commands::Agents => { print!("{}", AGENTS_MD); Ok(()) }
+        Commands::Agents => {
+            print!("{}", AGENTS_MD);
+            Ok(())
+        }
         Commands::Update => cmd_self_update(),
         Commands::Info { input } => cmd_info(input.as_deref(), json),
         Commands::Commits { input } => cmd_commits(&input, json, verbose),
         Commands::Profiles { input, test } => cmd_profiles(&input, test.as_deref(), json, verbose),
         Commands::Diagnose { input } => cmd_diagnose(input.as_deref(), json, verbose),
-        Commands::Patch { input } => cmd_patch(input.as_deref(), checkout.as_ref().unwrap(), json, verbose),
+        Commands::Patch { input } => {
+            cmd_patch(input.as_deref(), checkout.as_ref().unwrap(), json, verbose)
+        }
         Commands::Sheriff { input } => cmd_sheriff(input.as_deref(), json, verbose),
         Commands::Groom => cmd_groom(json, verbose),
-        Commands::Doctor { harness } => cmd_doctor(harness.as_deref(), checkout.as_ref().unwrap(), json, verbose),
+        Commands::Doctor { harness } => cmd_doctor(
+            harness.as_deref(),
+            checkout.as_ref().unwrap(),
+            json,
+            verbose,
+        ),
         Commands::Reindex => cmd_reindex(checkout.as_ref().unwrap(), json, verbose),
     }
 }
@@ -512,13 +522,19 @@ fn cmd_profiles(
         ),
     };
 
-    if verbose > 0 { eprintln!("Fetching alert {}...", alert_id); }
+    if verbose > 0 {
+        eprintln!("Fetching alert {}...", alert_id);
+    }
     let summary = api::perfherder::fetch_alert_summary(alert_id)?;
 
-    let all_alerts: Vec<_> = summary.regressions.iter()
+    let all_alerts: Vec<_> = summary
+        .regressions
+        .iter()
         .chain(summary.improvements.iter())
         .filter(|r| {
-            test_filter.map(|f| r.test.to_lowercase().contains(&f.to_lowercase())).unwrap_or(true)
+            test_filter
+                .map(|f| r.test.to_lowercase().contains(&f.to_lowercase()))
+                .unwrap_or(true)
         })
         .collect();
 
@@ -530,19 +546,30 @@ fn cmd_profiles(
     // Collect task IDs directly from alert metadata — no jobs API call needed.
     // Dedup by task_id since multiple alerts may share the same task.
     let mut seen = std::collections::HashSet::new();
-    let task_ids: Vec<(String, String, String)> = all_alerts.iter()
-        .filter_map(|r| r.task_id.as_ref().map(|t| (t.clone(), r.test.clone(), r.platform.clone())))
+    let task_ids: Vec<(String, String, String)> = all_alerts
+        .iter()
+        .filter_map(|r| {
+            r.task_id
+                .as_ref()
+                .map(|t| (t.clone(), r.test.clone(), r.platform.clone()))
+        })
         .filter(|(t, _, _)| seen.insert(t.clone()))
         .collect();
 
     if task_ids.is_empty() {
-        println!("Alert {} has no Taskcluster metadata — jobs may still be running.", alert_id);
+        println!(
+            "Alert {} has no Taskcluster metadata — jobs may still be running.",
+            alert_id
+        );
         println!("Profiles are only available for completed jobs.");
         return Ok(());
     }
 
     if verbose > 0 {
-        eprintln!("Checking {} task(s) for profile artifacts...", task_ids.len());
+        eprintln!(
+            "Checking {} task(s) for profile artifacts...",
+            task_ids.len()
+        );
     }
 
     let mut found_profiles: Vec<serde_json::Value> = Vec::new();
@@ -572,9 +599,17 @@ fn cmd_profiles(
     if json {
         println!("{}", serde_json::to_string_pretty(&found_profiles)?);
     } else {
-        println!("Found {} profile(s) for alert {}:", found_profiles.len(), alert_id);
+        println!(
+            "Found {} profile(s) for alert {}:",
+            found_profiles.len(),
+            alert_id
+        );
         for p in &found_profiles {
-            println!("\n  [{}] {}", p["platform"].as_str().unwrap_or(""), p["test"].as_str().unwrap_or(""));
+            println!(
+                "\n  [{}] {}",
+                p["platform"].as_str().unwrap_or(""),
+                p["test"].as_str().unwrap_or("")
+            );
             println!("  {}", p["url"].as_str().unwrap_or(""));
         }
         println!("\nEngineers: load with profiler-cli (ships with your Firefox checkout):");

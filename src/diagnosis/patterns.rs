@@ -420,9 +420,17 @@ mod tests {
     #[test]
     fn all_patterns_have_non_empty_matches() {
         for p in PATTERNS {
-            assert!(!p.matches.is_empty(), "Pattern {:?} has no match strings", p.description);
+            assert!(
+                !p.matches.is_empty(),
+                "Pattern {:?} has no match strings",
+                p.description
+            );
             for m in p.matches {
-                assert!(!m.is_empty(), "Pattern {:?} has empty match string", p.description);
+                assert!(
+                    !m.is_empty(),
+                    "Pattern {:?} has empty match string",
+                    p.description
+                );
             }
         }
     }
@@ -454,9 +462,9 @@ mod tests {
 
         for (log_line, expected_category) in test_cases {
             let lower = log_line.to_lowercase();
-            let matched = PATTERNS.iter().find(|p| {
-                p.matches.iter().all(|m| lower.contains(&m.to_lowercase()))
-            });
+            let matched = PATTERNS
+                .iter()
+                .find(|p| p.matches.iter().all(|m| lower.contains(&m.to_lowercase())));
             assert!(
                 matched.is_some(),
                 "No pattern matched log line: {:?}",
@@ -474,6 +482,10 @@ mod tests {
     #[test]
     fn pattern_count_reflects_corpus_depth() {
         // We should have at least 20 grounded patterns
-        assert!(PATTERNS.len() >= 20, "Expected ≥20 patterns, got {}", PATTERNS.len());
+        assert!(
+            PATTERNS.len() >= 20,
+            "Expected ≥20 patterns, got {}",
+            PATTERNS.len()
+        );
     }
 }

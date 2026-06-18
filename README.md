@@ -26,12 +26,13 @@ perftest-brain diagnose 'https://treeherder.mozilla.org/perfherder/alerts?id=447
 perftest-brain diagnose --json 44793
 ```
 
-Takes any Perfherder alert ID, Treeherder URL, Bugzilla URL, or revision hash. Returns:
+Takes any Perfherder alert ID, Bugzilla bug URL/ID, Treeherder URL, revision hash, or `"test-name platform"` string. Returns:
 - Signal type: intermittent vs sustained regression
-- Failure category and root cause (timeout, no-data, browser crash, infra, etc.)
+- Failure category and root cause (timeout, no-data, browser crash, infra, CaR, etc.)
 - Existing Bugzilla bugs for the failing test
-- Historical noise context via stmo-cli (if available)
-- Recommended next steps
+- Recommended next steps (including stmo-cli query for historical noise context)
+
+CaR (Chromium-as-Release) failures are automatically detected and handed off to `car-mechanic`.
 
 ### `patch` — write a fix to the local checkout
 
@@ -65,7 +66,7 @@ Returns Tier 1/2/3 classification with explicit reasoning and a backout recommen
 perftest-brain groom
 ```
 
-Fetches untriaged browsertime alerts from Perfherder, ranks by priority score (tier × severity), and suggests owners.
+Fetches untriaged alerts across all perf frameworks (browsertime, mozperftest, talos, awsy), ranks by priority score (tier × severity), and suggests owners.
 
 ### `doctor` — harness health check
 
@@ -87,7 +88,7 @@ Self-update to the latest version via `cargo install --force --git`.
 ### `reindex` — rebuild the local test index
 
 ```
-perftest-brain update
+perftest-brain reindex
 ```
 
 Walks `testing/raptor/`, `testing/mozperftest/`, `testing/performance/`, and `taskcluster/` and writes an incremental SQLite index. Used by `diagnose` for fast test lookups; falls back to `searchfox-cli` when the index is empty.
@@ -126,11 +127,13 @@ All commands that take `<input>` accept:
 | Format | Example |
 |--------|---------|
 | Alert ID | `44793` |
+| Bugzilla bug ID | `2047831` — auto-retried as bug if alert 404s |
 | Perfherder URL | `https://treeherder.mozilla.org/perfherder/alerts?id=44793` |
 | Bugzilla URL | `https://bugzilla.mozilla.org/show_bug.cgi?id=2042450` |
 | Treeherder push URL | `https://treeherder.mozilla.org/jobs?repo=autoland&revision=abc123` |
 | PerfCompare URL | `https://perf.compare.firefox.com/?baseRev=abc&newRev=def` |
 | Revision hash | `4bfc5585ab5d` |
+| Test + platform | `"raptor-speedometer linux64"` (`diagnose` only) |
 
 ## Global Flags
 
@@ -144,7 +147,9 @@ All commands that take `<input>` accept:
 
 | Tool | Required | Notes |
 |------|----------|-------|
-| `stmo-cli` | Optional | Historical noise queries — agents call it directly via `stmo-cli execute` |
+| `treeherder-cli` | Optional | Fetches actual job failure logs for `diagnose` — ships with the Firefox checkout |
+| `car-mechanic` | Optional | CaR build failures — `perftest-brain` delegates automatically when detected |
+| `stmo-cli` | Optional | Historical noise queries — agents call `stmo-cli execute <id> --format json` directly |
 | `searchfox-cli` | Optional | Code search fallback for `reindex`/`diagnose` |
 | `profiler-cli` | Optional | Load profiles surfaced by `perftest-brain profiles` |
 | `git` / `hg` / `jj` | Optional | VCS dirty-state check for `patch` |
